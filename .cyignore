@@ -1,0 +1,10 @@
+# Documentation
+images
+
+templates
+SquareLine_Studio_projects
+
+# Exports, Project settings
+.mtbLaunchConfigs
+.settings
+.vscode
