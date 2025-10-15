@@ -137,7 +137,7 @@ The peak CPU usage percentage is reported in the below table.
 
  High-performance state | Low-power state
  :----------    | :--------
- **Start Screen**: 47 % <br> **Analog watch**: 46 % <br> **Heart rate**: 47 %  <br> **Music screen**: 50 % <br> **Weather Screen**: 45 % <br> | 15 %
+ **Start Screen**: 51 % <br> **Analog watch**: 50 % <br> **Heart rate**: 52 %  <br> **Music screen**: 51 % <br> **Weather Screen**: 56 % <br> | 10 %
 
  <br>
 
@@ -161,9 +161,9 @@ The frames per seconds can be tuned using the following values for the respectiv
 
 **For 4.3-inch display:**
 
-`LV_DEF_REFR_PERIOD` and `LOW_POWER_SCREEN_REFRESH_TIME_MS` 
+`HIGH_PERF_REFRESH_MIN_TIME_MS` and `LOW_POWER_SCREEN_REFRESH_TIME_MS` 
 
-> **Note:** The value of `LV_DEF_REFR_PERIOD` is set to 16 ms in high-performance state while `LOW_POWER_SCREEN_REFRESH_TIME_MS` is 200 ms in low-power state.
+> **Note:** The value of `HIGH_PERF_REFRESH_MIN_TIME_MS` is set to 10 ms in high-performance state while `LOW_POWER_SCREEN_REFRESH_TIME_MS` is 200 ms in low-power state.
 
 Decreasing this value increases the FPS of the display. However, this also results in an increase in CPU usage percentage.
 
@@ -173,7 +173,7 @@ The FPS data obtained using the above mentioned delay values is shown in **Table
 
  High-performance state | Low-power state
  :----------    | :--------
- **Start Screen**: 26 <br> **Analog watch**: 27 <br> **Heart rate**: 27 <br> **Music screen**: 24 <br> **Weather Screen**: 26 <br> | 1 FPS
+ **Start Screen**: 36 <br> **Analog watch**: 30 <br> **Heart rate**: 36 <br> **Music screen**: 34 <br> **Weather Screen**: 32 <br> | 1 FPS
 
 **Table 8. Frames per second for 1.43-inch display**
 

@@ -80,6 +80,7 @@
 #define LVGL_REFRESH_TIME_MS                (9000U)
 #elif defined(W4P3INCH_DISP)
 #define LVGL_REFRESH_TIME_MS                (1000U)
+#define HIGH_PERF_REFRESH_MIN_TIME_MS       (10U)
 #define LOW_POWER_SCREEN_REFRESH_TIME_MS    (200U)
 #endif 
 
@@ -307,17 +308,18 @@ static void lptimer_interrupt_handler(void)
 *  void
 *
 * Return:
-*  void
+*  uint32_t time to wait
 *
 *******************************************************************************/
-__STATIC_INLINE void refresh_screen(void)
+__STATIC_INLINE uint32_t refresh_screen(void)
 {
-    lv_display_t *disp        = NULL;
+    lv_display_t *disp     = NULL;
     lv_timer_t *anim_timer = NULL;
+    uint32_t ret           = RESET_VAL;
 
     if (xSemaphoreTake(lvgl_mutex, portMAX_DELAY) == pdTRUE)
     {
-        lv_timer_handler();
+        ret = lv_timer_handler();
 
         if ((LOW_POWER_STATE == active_state) && state_change_complete)
         {
@@ -341,6 +343,8 @@ __STATIC_INLINE void refresh_screen(void)
         }
         xSemaphoreGive(lvgl_mutex);
     }
+
+    return ret;
 }
 
 
@@ -360,7 +364,10 @@ __STATIC_INLINE void refresh_screen(void)
 *******************************************************************************/
 static void smartwatch_app_task(void *arg)
 {
-    vg_lite_error_t result = VG_LITE_SUCCESS;
+    vg_lite_error_t result  = VG_LITE_SUCCESS;
+#if defined(W4P3INCH_DISP)
+    uint32_t time_till_next = RESET_VAL;
+#endif /* defined(W4P3INCH_DISP) */
 
     CY_UNUSED_PARAMETER(arg);
 
@@ -368,7 +375,8 @@ static void smartwatch_app_task(void *arg)
     vg_lite_init_mem(&gpu_mem_params);
 
     /* Initialize the memory and data structures needed for VGLite draw/blit
-       functions */
+     * functions 
+     */
     result = vg_lite_init(DEFAULT_VG_LITE_TW_WIDTH, DEFAULT_VG_LITE_TW_HEIGHT);
     if (VG_LITE_SUCCESS != result)
     {
@@ -459,8 +467,25 @@ static void smartwatch_app_task(void *arg)
         switch (active_state)
         {
             case HIGH_PERFORMANCE_STATE:
-                refresh_screen();
-                vTaskDelay(pdMS_TO_TICKS(LV_DEF_REFR_PERIOD));
+                /* 
+                * Refresh the screen and get the time (in ms) until the next update. 
+                * In some cases, refresh_screen() may return 0, indicating an immediate 
+                * refresh. However, taking a 0 ms delay causes continuous screen updates, 
+                * leading to display flickering. 
+                * 
+                * To avoid this, when time_till_next is 0, we introduce a minimum delay 
+                * (HIGH_PERF_REFRESH_MIN_TIME_MS) before the next refresh cycle. This ensures 
+                * smoother display rendering and prevents flickering.
+                */
+                time_till_next = refresh_screen();
+                if (time_till_next)
+                {
+                    vTaskDelay(pdMS_TO_TICKS(time_till_next));
+                }
+                else
+                {
+                    vTaskDelay(pdMS_TO_TICKS(HIGH_PERF_REFRESH_MIN_TIME_MS));
+                }
                 break;
 
             case LOW_POWER_STATE:
@@ -605,17 +630,17 @@ void stop_and_reset_timer(void)
 {
     BaseType_t status;
 
-    // Reset count
+    /* Reset count */
     run_count = 0;
 
-    // Reset timer period back to 1 second
+    /* Reset timer period back to 1 second */
     status= xTimerChangePeriod(lp_task_timer, pdMS_TO_TICKS(LP_TASK_TIMER_DEFAULT_TIME), 0);
     if (!status)
     {
         printf("Failed to reset timer period!\n");
     }
 
-    // Stop the timer
+    /* Stop the timer */
     status= xTimerStop(lp_task_timer, 0);
     if (!status)
     {

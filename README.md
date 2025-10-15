@@ -24,6 +24,7 @@ This code example also implements the emulation of the round smartwatch GUI in t
    CONFIG_DISPLAY=DASTEK_ROUND_1_43_INCH
    ```
    or
+
    ```
    CONFIG_DISPLAY=MICROTECH_ROUND_1_43_INCH
    ```
@@ -44,7 +45,7 @@ The firmware executes on the CM55 CPU.
 
 [View this README on GitHub.](https://github.com/Infineon/mtb-example-psoc-edge-gfx-lvgl-smartwatch)
 
-[Provide feedback on this code example.](https://cypress.co1.qualtrics.com/jfe/form/SV_1NTns53sK2yiljn?Q_EED=eyJVbmlxdWUgRG9jIElkIjoiQ0UyNDIyMTYiLCJTcGVjIE51bWJlciI6IjAwMi00MjIxNiIsIkRvYyBUaXRsZSI6IlBTT0MmdHJhZGU7IEVkZ2UgTUNVOiBTbWFydHdhdGNoIGRlbW8gdXNpbmcgTFZHTCIsInJpZCI6Im1hanVtZGFyIiwiRG9jIHZlcnNpb24iOiIyLjAuMCIsIkRvYyBMYW5ndWFnZSI6IkVuZ2xpc2giLCJEb2MgRGl2aXNpb24iOiJNQ0QiLCJEb2MgQlUiOiJJQ1ciLCJEb2MgRmFtaWx5IjoiUFNPQyJ9)
+[Provide feedback on this code example.](https://cypress.co1.qualtrics.com/jfe/form/SV_1NTns53sK2yiljn?Q_EED=eyJVbmlxdWUgRG9jIElkIjoiQ0UyNDIyMTYiLCJTcGVjIE51bWJlciI6IjAwMi00MjIxNiIsIkRvYyBUaXRsZSI6IlBTT0MmdHJhZGU7IEVkZ2UgTUNVOiBTbWFydHdhdGNoIGRlbW8gdXNpbmcgTFZHTCIsInJpZCI6Im1hanVtZGFyIiwiRG9jIHZlcnNpb24iOiIyLjAuMSIsIkRvYyBMYW5ndWFnZSI6IkVuZ2xpc2giLCJEb2MgRGl2aXNpb24iOiJNQ0QiLCJEb2MgQlUiOiJJQ1ciLCJEb2MgRmFtaWx5IjoiUFNPQyJ9)
 
 See the [Design and implementation](docs/design_and_implementation.md) for the functional description of this code example.
 
@@ -95,7 +96,8 @@ Ensure the following jumper and pin configuration on board.
    
    ![](images/display-kit-connection.png)
 
-<br>
+   <br>
+
 2. **1.43-inch 466*466 pixel round AMOLED display:** This setup requires rework on the PSOC&trade; Edge E84 Evaluation Kit, and the rework instructions are as follows:
 
    - **Remove:** R22, R23, R24, R25, R26, R27, R462
@@ -124,7 +126,6 @@ Ensure the following jumper and pin configuration on board.
    ![](images/1_43_display_connection.png)
 
 <br>
-
 
 ## Software setup
 
@@ -172,6 +173,7 @@ See [Using the code example](docs/using_the_code_example.md) for instructions on
        ```
        CONFIG_DISPLAY = DASTEK_ROUND_1_43_INCH
        ```
+
        or
 
        ```
@@ -206,9 +208,9 @@ See [Using the code example](docs/using_the_code_example.md) for instructions on
 
 10. For 1.43-inch, after 30 seconds of inactivity, the application state changes to low-power state and the "Always-ON" GUI of the Smartwatch is displayed as shown in **Figure 10**. After further 30 seconds of inactivity, the device enters the ultra-low power and the display is turned off
 
-   **Figure 10. 1.43-inch Always-ON UI**
+    **Figure 10. 1.43-inch Always-ON UI**
 
-   ![](images/1_43_inch_always_on_ui.png)
+    ![](images/1_43_inch_always_on_ui.png)
 
 ## Related resources
 
@@ -237,6 +239,7 @@ Document title: *CE242216* – *PSOC&trade; Edge MCU: Smartwatch demo using LVGL
  ------- | ---------------------
  1.x.0   | New code example <br> Early access release
  2.0.0   | GitHub release 
+ 2.0.1   | Performance improvement in 4.3-inch display usecase
 <br>
 
 
