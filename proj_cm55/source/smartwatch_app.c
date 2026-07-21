@@ -41,19 +41,27 @@
 *******************************************************************************/
 #include "smartwatch_app.h"
 
+#include "cybsp.h"
 #include "cybsp_types.h"
+#include "cycfg_peripherals.h"
 #include "lv_port_disp.h"
 #include "lv_port_indev.h"
 
 #include "vg_lite_platform.h"
 
+#if !LV_USE_DEMO_BENCHMARK
 #include "ui.h"
+#endif
 #include "app_state_manager.h"
 #include "time_date_task.h"
 #include "step_count_task.h"
 
 #include "app_logger.h"
 #include "lv_api_map_v8.h"
+
+#if LV_USE_DEMO_BENCHMARK
+#include "demos/lv_demos.h"
+#endif
 
 #if defined(MTB_DISPLAY_CO5300)
 #include "mtb_display_co5300.h"
@@ -75,6 +83,9 @@
 
 #if defined(MTB_DISPLAY_CO5300)
 #define SCREEN_REFRESH_TIME_MS              (30U)
+#if LV_USE_DEMO_BENCHMARK
+#define HIGH_PERF_REFRESH_MIN_TIME_MS       (1U)
+#endif /* LV_USE_DEMO_BENCHMARK */
 #define LP_TASK_TIMER_DEFAULT_TIME          (1000U)
 #define LP_TASK_TIMER_RESET_TIME            (9000U)
 #define LVGL_REFRESH_TIME_MS                (9000U)
@@ -82,7 +93,30 @@
 #define LVGL_REFRESH_TIME_MS                (1000U)
 #define HIGH_PERF_REFRESH_MIN_TIME_MS       (10U)
 #define LOW_POWER_SCREEN_REFRESH_TIME_MS    (200U)
-#endif 
+/*
+ * Toolchain-specific tearing workaround for W4P3 rectangle panel.
+ *
+ * To take full advantage of the double-buffer, the disp_flush commits the
+ * new buffer (vsync-latched) and releases LVGL right away, so LVGL renders
+ * the next frame while the just-committed buffer is still being scanned out.
+ * The DCNano only latches the new address at the NEXT 60 Hz vsync. When the
+ * LVGL loop runs faster than one vsync per frame, LVGL re-touches an on-screen
+ * buffer mid-scan causing tearing.
+ *
+ * Some toolchain may render fast enough to sustain ~60 FPS and hit this race.
+ * Capping the frame cadence to around ~36 FPS timing margin removes the tearing. */
+#if LV_USE_DEMO_BENCHMARK
+#define W4P3_HP_FRAME_PERIOD_MIN_MS         (15U)
+#else
+#define W4P3_HP_FRAME_PERIOD_MIN_MS         (13U)
+#endif
+#endif /* W4P3INCH_DISP */
+
+/* The shared CO5300 driver hard-wires its DSI pixel_clock for a 512-px line
+ * (DISPLAY_RES_WIDTH=512). We re-scale it to the real DC line width
+ * (DISP_DC_HOR_RES) so the MIPI-DSI per-line timing matches the DC transfer
+ * width and the panel - see gfx_init(). 14315 * 472/512 = 13197. */
+#define MIPI_PIXEL_CLOCK_512                (14315U)
 
 /* Enabling or disabling a MCWDT requires a wait time of upto 2 CLK_LF cycles
  * to come into effect. This wait time value will depend on the actual CLK_LF
@@ -101,6 +135,7 @@
 GFXSS_Type* base = (GFXSS_Type*) GFXSS;
 extern cy_stc_gfx_context_t gfx_context;
 cy_stc_scb_i2c_context_t i2c_context;
+extern volatile bool fb_pending;
 
 /* Heap memory for VGLite to allocate memory for buffers, command, and
    tessellation buffers */
@@ -109,7 +144,7 @@ CY_SECTION(".cy_gpu_buf") uint8_t vglite_mem[VGLITE_HEAP_SIZE] = { 0xFF };
 volatile uint8_t brightness      = MAX_BRIGHTNESS_PERCENT;
 
 #if defined(MTB_DISPLAY_CO5300)
-TaskHandle_t rtos_frame_tx_task_handle = NULL;
+SemaphoreHandle_t frame_tx_sem = NULL;
 #endif /* MTB_DISPLAY_CO5300 */
 
 TaskHandle_t rtos_app_state_manager_task_handle = NULL;
@@ -164,7 +199,7 @@ cy_stc_syspm_callback_t gfx_deep_sleep_callback_cfg =
 };
 
 /* GPU memory configuration */
-vg_module_parameters_t gpu_mem_params = 
+vg_module_parameters_t gpu_mem_params =
 {
     .register_mem_base      = (uint32_t) GFXSS_GFXSS_GPU_GCNANO,
     .gpu_mem_base[0]        = RESET_VAL,
@@ -204,35 +239,64 @@ static void dc_irq_handler(void)
 
 
 #if defined(MTB_DISPLAY_CO5300)
+/* DC interrupt configuration for DBI command mode - slice completion */
+const cy_stc_sysint_t dc_dbi_int_config =
+{
+    .intrSrc      = GFXSS_DC_IRQ,
+    .intrPriority = DC_DBI_INT_PRIORITY
+};
+
 /*******************************************************************************
-* Function Name: frame_transfer_task
+* Function Name: dc_dbi_irq_handler
 ********************************************************************************
 * Summary:
-*  This freeRTOS task handles transferring rendered frames to display panel from
-*  display controller.
-*
+*  DC interrupt handler for DBI command mode frame transfers.
+*  Interrupt fires when the DC finishes consuming the framebuffer
+*  for one DBI slice. The PDL handler chains slices and invokes the registered
+*  completion callback when the frame is done.
 * Parameters:
-*  *arg: Not used
+*  void
 *
 * Return:
 *  void
 *
 *******************************************************************************/
-static void frame_transfer_task(void *arg)
+static void dc_dbi_irq_handler(void)
 {
-    CY_UNUSED_PARAMETER(arg);
+    Cy_GFXSS_DC_DBI_InterruptHandler(base, &gfx_context);
+}
 
-    frame_tx_done = true;
+/*******************************************************************************
+* Function Name: on_frame_transfer_complete
+********************************************************************************
+* Summary:
+*  Completion callback invoked by the PDL from ISR context when all DBI slices
+*  have been transferred. Gives the binary semaphore so the LVGL flush task
+*  can proceed with the next frame.
+* Parameters:
+*  void
+*
+* Return:
+*  void
+*
+*******************************************************************************/
+static void on_frame_transfer_complete(void)
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    for (;;)
-    {
-        if (pdPASS == xTaskNotifyWait(RESET_VAL, RESET_VAL, NULL, portMAX_DELAY))
-        {
-            Cy_GFXSS_Transfer_Frame((GFXSS_Type*) GFXSS, &gfx_context);
+    /* Transfer done - disable DC_IRQ until the next async transfer starts.
+     * This prevents spurious DC interrupts during DeepSleep idle windows
+     * (the GFXSS AFTER_TRANSITION callback restores INTR_MASK on every wake,
+     * which would fire a DC interrupt if DC_IRQ remained enabled in NVIC).
+     * disp_flush() re-enables DC_IRQ right before the next transfer. */
+    NVIC_DisableIRQ(GFXSS_DC_IRQ);
 
-            frame_tx_done = true;
-        }
-    }
+    /* Allow DeepSleep now that the ISR chain is complete. */
+    dbi_transfer_in_flight = false;
+    mtb_hal_syspm_unlock_deepsleep();
+
+    xSemaphoreGiveFromISR(frame_tx_sem, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 #endif /* MTB_DISPLAY_CO5300 */
 
@@ -275,6 +339,49 @@ static void i2c_interrupt_callback(void)
 {
     Cy_SCB_I2C_Interrupt(CYBSP_I2C_CONTROLLER_HW, &i2c_context);
 }
+
+
+#if LV_USE_DEMO_BENCHMARK
+/*******************************************************************************
+* Function Name: benchmark_end_cb
+********************************************************************************
+* Summary:
+*  Called by lv_demo_benchmark() when all test scenes have completed.
+*  Re-enables I2C + touch, then displays the summary results table.
+*
+*  The I2C SCB block is fully re-initialized (not just Disable/Enable) because
+*  the IRQ was disabled for the entire benchmark run. During that time the
+*  touch controller may have clocked data onto the bus that the ISR never
+*  serviced, leaving the context struct and hardware state machine corrupted.
+*  A full Cy_SCB_I2C_Init() resets both the registers and the software context.
+*
+* Parameters:
+*  summary: Pointer to the benchmark summary provided by LVGL
+*
+* Return:
+*  void
+*
+*******************************************************************************/
+static void benchmark_end_cb(const lv_demo_benchmark_summary_t *summary)
+{
+    /* 1. Full I2C peripheral re-initialization */
+    Cy_SCB_I2C_Disable(CYBSP_I2C_CONTROLLER_HW, &i2c_context);
+    Cy_SCB_I2C_Init(CYBSP_I2C_CONTROLLER_HW,
+                    &CYBSP_I2C_CONTROLLER_config,
+                    &i2c_context);
+    Cy_SCB_I2C_Enable(CYBSP_I2C_CONTROLLER_HW);
+
+    /* 2. Clear stale IRQ flags and re-enable the ISR */
+    NVIC_ClearPendingIRQ(i2c_scb_irq_cfg.intrSrc);
+    NVIC_EnableIRQ(i2c_scb_irq_cfg.intrSrc);
+
+    /* 3. Re-initialize touch controller and register LVGL indev */
+    lv_port_indev_init();
+
+    /* 4. Show the benchmark results table */
+    lv_demo_benchmark_summary_display(summary);
+}
+#endif /* LV_USE_DEMO_BENCHMARK */
 
 
 /*******************************************************************************
@@ -365,9 +472,9 @@ __STATIC_INLINE uint32_t refresh_screen(void)
 static void smartwatch_app_task(void *arg)
 {
     vg_lite_error_t result  = VG_LITE_SUCCESS;
-#if defined(W4P3INCH_DISP)
+#if defined(W4P3INCH_DISP) || defined(MTB_DISPLAY_CO5300)
     uint32_t time_till_next = RESET_VAL;
-#endif /* defined(W4P3INCH_DISP) */
+#endif /* defined(W4P3INCH_DISP) || (defined(MTB_DISPLAY_CO5300) */
 
     CY_UNUSED_PARAMETER(arg);
 
@@ -375,8 +482,7 @@ static void smartwatch_app_task(void *arg)
     vg_lite_init_mem(&gpu_mem_params);
 
     /* Initialize the memory and data structures needed for VGLite draw/blit
-     * functions 
-     */
+     * functions */
     result = vg_lite_init(DEFAULT_VG_LITE_TW_WIDTH, DEFAULT_VG_LITE_TW_HEIGHT);
     if (VG_LITE_SUCCESS != result)
     {
@@ -387,8 +493,20 @@ static void smartwatch_app_task(void *arg)
     /* Initialize LVGL library */
     lv_init();
     lv_port_disp_init();
-    lv_port_indev_init();
 
+#if LV_USE_DEMO_BENCHMARK
+    /* Disable I2C interrupt during benchmark - only needed for display panel
+     * init. Re-enabled inside benchmark_end_cb() after all scenes finish. */
+    NVIC_DisableIRQ(i2c_scb_irq_cfg.intrSrc);
+
+    /* Register end callback - LVGL calls it when all scenes complete.
+     * Inside the callback we re-init I2C, enable touch, and display the
+     * summary table. */
+    lv_demo_benchmark_set_end_cb(benchmark_end_cb);
+
+    lv_demo_benchmark();
+#else
+    lv_port_indev_init();
     ui_init();
 
     /* Notify the date_time_task that UI init is done */
@@ -396,8 +514,9 @@ static void smartwatch_app_task(void *arg)
 
     /* Notify the step_count_task that UI init is done */
     xTaskNotifyGive(rtos_step_count_task_handle);
+#endif
 
-#if defined(MTB_DISPLAY_CO5300)
+#if defined(MTB_DISPLAY_CO5300) && !LV_USE_DEMO_BENCHMARK
     /* Start input_inactivity_timer to track inactivity on display */
     if (pdPASS != input_inactivity_timer_start())
     {
@@ -426,7 +545,7 @@ static void smartwatch_app_task(void *arg)
     {
 #if defined(MTB_DISPLAY_CO5300)
         if ( ULTRA_LOW_POWER_STATE == active_state )
-        {  
+        {
             xTaskNotifyWait(RESET_VAL, RESET_VAL, NULL, portMAX_DELAY);
         }
         else if ( ( LOW_POWER_STATE == active_state ) )
@@ -441,43 +560,76 @@ static void smartwatch_app_task(void *arg)
         {
             if (HIGH_PERFORMANCE_STATE != active_state)
             {
+                dbi_transfer_enabled = false;
                 active_state = HIGH_PERFORMANCE_STATE;
                 xTaskNotify(rtos_app_state_manager_task_handle, RESET_VAL, eNoAction);
             }
             else
             {
-                refresh_screen();
+                time_till_next = refresh_screen();
 
-                /* Reset/restart the input_inactivity_timer */
-                xTimerReset(input_inactivity_timer, RESET_VAL);
+                /* Reset/restart the input_inactivity_timer (NULL in benchmark mode) */
+                if (input_inactivity_timer != NULL)
+                {
+                    xTimerReset(input_inactivity_timer, RESET_VAL);
+                }
             }
             touch_activity = false;
         }
         else if ((ULTRA_LOW_POWER_STATE != active_state) && (!display_active_timeout))
         /* No input activity and display_active_timeout is false */
         {
-            refresh_screen();
+            time_till_next = refresh_screen();
         }
 
         if (ULTRA_LOW_POWER_STATE != active_state)
         {
+#if LV_USE_DEMO_BENCHMARK
+            if (HIGH_PERFORMANCE_STATE == active_state)
+            {
+                /* Dynamic timing: sleep until next LVGL timer fires, with a minimum delay
+                 * to avoid tight polling. Mirrors the W4P3INCH approach below. */
+                if (time_till_next)
+                {
+                    vTaskDelay(pdMS_TO_TICKS(time_till_next));
+                }
+                else
+                {
+                    vTaskDelay(pdMS_TO_TICKS(HIGH_PERF_REFRESH_MIN_TIME_MS));
+                }
+            }
+            else
+            {
+                vTaskDelay(pdMS_TO_TICKS(SCREEN_REFRESH_TIME_MS));
+            }
+#else
+            CY_UNUSED_PARAMETER(time_till_next);
             vTaskDelay(pdMS_TO_TICKS(SCREEN_REFRESH_TIME_MS));
+#endif /* LV_USE_DEMO_BENCHMARK */
         }
 #elif defined(W4P3INCH_DISP)
         switch (active_state)
         {
             case HIGH_PERFORMANCE_STATE:
-                /* 
-                * Refresh the screen and get the time (in ms) until the next update. 
-                * In some cases, refresh_screen() may return 0, indicating an immediate 
-                * refresh. However, taking a 0 ms delay causes continuous screen updates, 
-                * leading to display flickering. 
-                * 
-                * To avoid this, when time_till_next is 0, we introduce a minimum delay 
-                * (HIGH_PERF_REFRESH_MIN_TIME_MS) before the next refresh cycle. This ensures 
+                /*
+                * Refresh the screen and get the time (in ms) until the next update.
+                * In some cases, refresh_screen() may return 0, indicating an immediate
+                * refresh. However, taking a 0 ms delay causes continuous screen updates,
+                * leading to display flickering.
+                *
+                * To avoid this, when time_till_next is 0, we introduce a minimum delay
+                * (HIGH_PERF_REFRESH_MIN_TIME_MS) before the next refresh cycle. This ensures
                 * smoother display rendering and prevents flickering.
                 */
                 time_till_next = refresh_screen();
+#if (W4P3_HP_FRAME_PERIOD_MIN_MS > 0U)
+                /* Toolchain dependent FPS cap: enforce a minimum frame period so the
+                 * immediate-release flush never re-renders an on-screen buffer mid-scan. */
+                if (time_till_next < W4P3_HP_FRAME_PERIOD_MIN_MS)
+                {
+                    time_till_next = W4P3_HP_FRAME_PERIOD_MIN_MS;
+                }
+#endif
                 if (time_till_next)
                 {
                     vTaskDelay(pdMS_TO_TICKS(time_till_next));
@@ -582,9 +734,9 @@ void setup_tickless_idle_timer(void)
 * Function Name: lp_task_timer_callback
 ********************************************************************************
 * Summary:
-*  Callback function for the low power task timer (lp_task_timer). Increments  
-*  the run_count each time the timer expires. After the first expiry, the 
-*  timer period is changed from 1 second to 10 seconds. The function also 
+*  Callback function for the low power task timer (lp_task_timer). Increments
+*  the run_count each time the timer expires. After the first expiry, the
+*  timer period is changed from 1 second to 9 seconds. The function also
 *  notifies the rtos_app_task_handle task to perform further processing.
 *
 * Parameters:
@@ -596,19 +748,16 @@ void setup_tickless_idle_timer(void)
 *******************************************************************************/
 void lp_task_timer_callback(TimerHandle_t timer)
 {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    
     run_count++;
     CY_UNUSED_PARAMETER(timer);
 
     if (run_count == 1)
     {
-        // Change period to 10 seconds after 1 runs
+        // Change period to 9 seconds after the first run
         xTimerChangePeriod(lp_task_timer, pdMS_TO_TICKS(LP_TASK_TIMER_RESET_TIME), 0);
     }
 
-    xTaskNotifyFromISR(rtos_app_task_handle, 0, eNoAction, &xHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    xTaskNotify(rtos_app_task_handle, 0, eNoAction);
 }
 
 
@@ -617,7 +766,7 @@ void lp_task_timer_callback(TimerHandle_t timer)
 ********************************************************************************
 * Summary:
 *  Stops the low power task timer (lp_task_timer) and resets its period back to 1 second.
-*  The timer is not restarted after this call. Also resets the runCount variable.
+*  The timer is not restarted after this call. Also resets the run_count variable.
 *
 * Parameters:
 *  None
@@ -653,8 +802,8 @@ void stop_and_reset_timer(void)
 * Function Name: lp_task_timer_init
 ********************************************************************************
 * Summary:
-*  Creates and initializes the low power timer (lp_task_timer) with a 1 second 
-*  period.The timer runs in auto-reload mode and executes 
+*  Creates and initializes the low power timer (lp_task_timer) with a 1 second
+*  period.The timer runs in auto-reload mode and executes
 *  lp_task_timer_callback() on expiry.
 *
 * Parameters:
@@ -682,8 +831,8 @@ void lp_task_timer_init(void)
 ********************************************************************************
 * Summary:
 *  This function performs I2C, graphics subsystem, GPU and DC interrupt
-*  initializations. It creates application, state manager, frame transfer 
-*  tasks and perform necessary initializations related to UI interaction tasks. 
+*  initializations. It creates the application and state manager tasks and
+*  performs necessary initializations related to UI interaction tasks.
 *
 * Parameters:
 *  void
@@ -707,7 +856,7 @@ cy_rslt_t smartwatch_app_init(void)
     Cy_SysPm_RegisterCallback(&gfx_deep_sleep_callback_cfg);
 
     /* Configure SCB as I2C controller. Its used to interface with touch controller
-     * and display initialization. 
+     * and display initialization.
      */
     i2c_status = Cy_SCB_I2C_Init(CYBSP_I2C_CONTROLLER_HW, &CYBSP_I2C_CONTROLLER_config, &i2c_context);
     if (CY_SCB_I2C_SUCCESS != i2c_status)
@@ -737,6 +886,43 @@ cy_rslt_t smartwatch_app_init(void)
 #if defined(MTB_DISPLAY_CO5300)
     GFXSS_config.mipi_dsi_cfg = &mtb_display_co5300_gfx_mipi_dsi_config;
 
+    /* The shared CO5300 driver's DSI config is hard-wired to a 512-px line
+     * (DISPLAY_RES_WIDTH=512, pixel_clock=14315). That programs the MIPI-DSI
+     * controller's VID_PKT_SIZE and per-line byte-clock (LBCC) timing, which
+     * must match the DC transfer width (DISP_DC_HOR_RES):
+     *   - Benchmark demo (32-bit) : DC width 472. The default 512-px DSI line
+     *     would mis-frame every row (512 vs 472) -> progressive per-row shift
+     *     (the "complete tearing + horizontal lines"). Re-scale to hdisplay=472,
+     *     pixel_clock=13197 = 14315 * 472/512 (the proven reference values).
+     *   - Smartwatch UI (16-bit) : DC width 512. The formula yields hdisplay=512
+     *     and pixel_clock=14315 - identical to the driver default - so this is a
+     *     no-op and keeps the original, proven-good 512-px geometry.
+     * One expression covers both because pixel_clock scales linearly with the
+     * line width. */
+    GFXSS_config.mipi_dsi_cfg->display_params->hdisplay    = DISP_DC_HOR_RES;
+    GFXSS_config.mipi_dsi_cfg->display_params->pixel_clock =
+            (uint32_t)(((uint64_t)MIPI_PIXEL_CLOCK_512 * DISP_DC_HOR_RES) / 512U);
+
+    /* DC/panel transfer width = DISP_DC_HOR_RES (472 benchmark / 512 smartwatch
+     * - see lv_port_disp.h). The value is chosen per color depth so the DC line
+     * stride roundup(DISP_DC_HOR_RES * bytes_per_px, 128) equals the LVGL buffer
+     * row stride (MY_DISP_HOR_RES * bytes_per_px); a mismatch causes per-row
+     * wrap / tearing or a blank panel. */
+    GFXSS_config.dc_cfg->display_width  = DISP_DC_HOR_RES;
+    GFXSS_config.dc_cfg->display_height = DISP_DC_VER_RES;
+
+    /* Tell the DC graphics layer which source pixel format to read; it must
+     * match the LVGL frame-buffer depth (LV_COLOR_DEPTH / DISP_USE_XRGB8888):
+     *   - Benchmark demo : 32-bit XRGB8888 source (vivARGB8888).
+     *   - Smartwatch UI  : 16-bit RGB565 source (vivRGB565), matching the
+     *     SquareLine assets. The panel itself stays 24-bit RGB888
+     *     (display_format unchanged); the DC converts the source on the fly. */
+#if DISP_USE_XRGB8888
+    GFXSS_config.dc_cfg->gfx_layer_config->input_format_type = vivARGB8888;
+#else
+    GFXSS_config.dc_cfg->gfx_layer_config->input_format_type = vivRGB565;
+#endif
+
 #elif defined(W4P3INCH_DISP)
     GFXSS_config.dc_cfg->ovl0_layer_config->layer_enable = false;
 
@@ -753,8 +939,11 @@ cy_rslt_t smartwatch_app_init(void)
     GFXSS_config.dc_cfg->gfx_layer_config->buffer_address    = frame_buffer1;
     GFXSS_config.dc_cfg->gfx_layer_config->uv_buffer_address = frame_buffer1;
 
-    GFXSS_config.dc_cfg->gfx_layer_config->width  = MY_DISP_HOR_RES;
-    GFXSS_config.dc_cfg->gfx_layer_config->height = MY_DISP_VER_RES;
+    /* Graphics layer reads DISP_DC_HOR_RES visible columns per row with a
+     * 128-aligned line stride that matches the LVGL buffer stride (472/480 for
+     * the 32-bit benchmark, 512/512 for the 16-bit smartwatch UI). */
+    GFXSS_config.dc_cfg->gfx_layer_config->width  = DISP_DC_HOR_RES;
+    GFXSS_config.dc_cfg->gfx_layer_config->height = DISP_DC_VER_RES;
 
     /* Updated GFXSS clk/CLK_HF1 */
     GFXSS_config.clockHz = Cy_SysClk_ClkHfGetFrequency(CY_CFG_SYSCLK_CLKHF1);
@@ -778,19 +967,13 @@ cy_rslt_t smartwatch_app_init(void)
     }
 
 #if defined(MTB_DISPLAY_CO5300)
-    /* Create frame transfer FreeRTOS Task */
-    task_status = xTaskCreate(frame_transfer_task, FRAME_TX_TASK_NAME,
-                                                   FRAME_TX_TASK_STACK_SIZE,
-                                                   NULL,
-                                                   FRAME_TX_TASK_PRIORITY,
-                                                   &rtos_frame_tx_task_handle);
-
-    if (pdPASS != task_status)
-    {
-        process_error(CY_RTOS_GENERAL_ERROR, "frame_transfer_task creation failed. STOP.");
-    }
+    /* Create binary semaphore for frame transfer completion signaling */
+    frame_tx_sem = xSemaphoreCreateBinary();
+    CY_ASSERT(frame_tx_sem != NULL);
+    xSemaphoreGive(frame_tx_sem);  /* Initially available for first flush */
 #endif /* MTB_DISPLAY_CO5300 */
 
+#if !LV_USE_DEMO_BENCHMARK
     /* Create application state manager FreeRTOS Task */
     task_status = xTaskCreate(app_state_manager_task, APP_STATE_MANAGER_TASK_NAME, APP_STATE_MANAGER_TASK_STACK_SIZE,
             NULL, APP_STATE_MANAGER_TASK_PRIORITY, &rtos_app_state_manager_task_handle);
@@ -805,6 +988,7 @@ cy_rslt_t smartwatch_app_init(void)
 
     /* Perform initialization pertaining to step count task */
     step_count_task_init();
+#endif /* !LV_USE_DEMO_BENCHMARK */
 
     /* Intialize GPU interrupt */
     result = (cy_rslt_t)Cy_SysInt_Init(&gpu_int_config, gpu_irq_handler);
@@ -823,6 +1007,22 @@ cy_rslt_t smartwatch_app_init(void)
 
 #if defined(MTB_DISPLAY_CO5300)
     lp_task_timer_init();
+
+    /* Register completion callback - PDL calls this from ISR when frame done */
+    Cy_GFXSS_RegisterTransferCompleteCallback(&gfx_context, on_frame_transfer_complete);
+
+    /* Initialize DC interrupt for DBI command mode frame transfers */
+    result = (cy_rslt_t)Cy_SysInt_Init(&dc_dbi_int_config, dc_dbi_irq_handler);
+    if (CY_RSLT_SUCCESS != result)
+    {
+        process_error(result, "DC DBI interrupt registration failed. STOP.");
+    }
+
+    /* Enable DC DBI interrupt in NVIC */
+    NVIC_EnableIRQ(dc_dbi_int_config.intrSrc);
+
+    /* Clear pending DC DBI interrupt in NVIC */
+    NVIC_ClearPendingIRQ(dc_dbi_int_config.intrSrc);
 #endif /*MTB_DISPLAY_CO5300*/
 
 #if defined(W4P3INCH_DISP)

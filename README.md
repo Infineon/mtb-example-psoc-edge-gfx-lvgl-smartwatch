@@ -12,7 +12,7 @@ MTZ0143GF01AAA03AV1 | 1.43-inch 466x466 AMOLED+CTP MIPI-DSI Display | Microtech 
 
 This code example also implements the emulation of the round smartwatch GUI in the same resolution on a 4.3-inch MIPI DSI Raspberry Pi DSI display. If you do not have access to the 1.43-inch display, you can run this code example on the 4.3-inch one, which is widely available to purchase from the Raspberry-Pi ecosystem. This application demonstrates the ability to leverage the Graphics Processing Unit (GPU) for high-performance GUI rendering, as well as a CPU-rendered low-power always-on screen.
 
-> **Note:** This application builds for the 4.3-inch display by default. 
+> **Note:** This application builds for the 4.3-inch display by default.
 
    ```
    CONFIG_DISPLAY=RECTANGLE_4_3_INCH
@@ -35,24 +35,24 @@ Both the displays are interfaced to the PSOC&trade; Edge MCU using Mobile Indust
 
    ![](images/block-diagram.png) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ![](images/block-diagram-4.3-inch.png)
 
-**Figure 1** shows the block diagram summarizing the system setup of the smartwatch graphics application. 
+**Figure 1** shows the block diagram summarizing the system setup of the smartwatch graphics application.
 The 1.43-inch display is interfaced using one-lane MIPI DSI in command mode whereas the 4.3-inch Raspberry-Pi display is interfaced using one-lane MIPI DSI in video mode.
 Configuration data is sent to 4.3-inch display through the I2C lines during initialization.
-The touch panel driver ICs of both the displays are interfaced using the I2C protocol for reading the touch coordinates. 
-For 1.43-inch display, GPIOs are used for interfacing Interrupt and Reset lines of display and touch panels. 
+The touch panel driver ICs of both the displays are interfaced using the I2C protocol for reading the touch coordinates.
+For 1.43-inch display, GPIOs are used for interfacing Interrupt and Reset lines of display and touch panels.
 The 4.3-inch display's touch panel interrupt line is not connected to the PSOC&trade; Edge Evaluation Kit. The touch data is polled by the firmware at regular intervals.
-The firmware executes on the CM55 CPU. 
+The firmware executes on the CM55 CPU.
 
 [View this README on GitHub.](https://github.com/Infineon/mtb-example-psoc-edge-gfx-lvgl-smartwatch)
 
-[Provide feedback on this code example.](https://yourvoice.infineon.com/jfe/form/SV_1NTns53sK2yiljn?Q_EED=eyJVbmlxdWUgRG9jIElkIjoiQ0UyNDIyMTYiLCJTcGVjIE51bWJlciI6IjAwMi00MjIxNiIsIkRvYyBUaXRsZSI6IlBTT0MmdHJhZGU7IEVkZ2UgTUNVOiBTbWFydHdhdGNoIGRlbW8gdXNpbmcgTFZHTCIsInJpZCI6InNhbmplZXYubWFqdW1kYXJAaW5maW5lb24uY29tIiwiRG9jIHZlcnNpb24iOiIyLjEuMCIsIkRvYyBMYW5ndWFnZSI6IkVuZ2xpc2giLCJEb2MgRGl2aXNpb24iOiJNQ0QiLCJEb2MgQlUiOiJJQ1ciLCJEb2MgRmFtaWx5IjoiUFNPQyJ9)
+[Provide feedback on this code example.](https://yourvoice.infineon.com/jfe/form/SV_1NTns53sK2yiljn?Q_EED=eyJVbmlxdWUgRG9jIElkIjoiQ0UyNDIyMTYiLCJTcGVjIE51bWJlciI6IjAwMi00MjIxNiIsIkRvYyBUaXRsZSI6IlBTT0MmdHJhZGU7IEVkZ2UgTUNVOiBTbWFydHdhdGNoIGRlbW8gdXNpbmcgTFZHTCIsInJpZCI6InNhbmplZXYubWFqdW1kYXJAaW5maW5lb24uY29tIiwiRG9jIHZlcnNpb24iOiIyLjIuMCIsIkRvYyBMYW5ndWFnZSI6IkVuZ2xpc2giLCJEb2MgRGl2aXNpb24iOiJNQ0QiLCJEb2MgQlUiOiJJQ1ciLCJEb2MgRmFtaWx5IjoiUFNPQyJ9)
 
 See the [Design and implementation](docs/design_and_implementation.md) for the functional description of this code example.
 
 
 ## Requirements
 
-- [ModusToolbox&trade;](https://www.infineon.com/modustoolbox) v3.7 or later (tested with v3.7)
+- [ModusToolbox&trade;](https://www.infineon.com/modustoolbox) v3.7 or later (tested with v3.8)
 - Board support package (BSP) minimum required version: 1.1.0
 - Programming language: C
 - Associated parts: All [PSOC&trade; Edge MCU](https://www.infineon.com/products/microcontroller/32-bit-psoc-arm-cortex/32-bit-psoc-edge-arm) parts
@@ -64,6 +64,8 @@ See the [Design and implementation](docs/design_and_implementation.md) for the f
 - Arm&reg; Compiler v6.22 (`ARM`)
 - IAR C/C++ Compiler v9.50.2 (`IAR`)
 - LLVM Embedded Toolchain for Arm&reg; v19.1.5 (`LLVM_ARM`)
+
+> **Note:** The IAR builds use LVGL's portable C software-renderer fallback instead of the Helium assembly path because the LVGL Helium assembly sources are not compatible with the IAR assembler. Application behavior is unchanged, and VG-Lite GPU acceleration remains enabled.
 
 
 ## Supported kits (make variable 'TARGET')
@@ -86,14 +88,14 @@ Ensure the following jumper and pin configuration on board.
 
    Connect the FPC 15-pin cable between the display connector and the PSOC&trade; Edge E84 evaluation kit's RPI MIPI DSI connector as shown in **Figure 2** <br>
 
-   **Table 2: PSOC&trade; Edge E84 Evaluation Kit connections** 
+   **Table 2: PSOC&trade; Edge E84 Evaluation Kit connections**
 
    Display's connector | PSOC&trade; Edge E84 Evaluation Kit's connector
    --------------------|----------------------------------------
    DSI connector       | J39
 
    **Figure 2. 4.3-inch display connection with PSOC&trade; Edge E84 Evaluation Kit**
-   
+
    ![](images/display-kit-connection.png)
 
    <br>
@@ -119,10 +121,10 @@ Ensure the following jumper and pin configuration on board.
    Display's connector | PSOC&trade; Edge E84 Evaluation Kit's connector
    --------------------|----------------------------------------
    DSI connector       | J38
-   Touch connector     | J37 
+   Touch connector     | J37
 
    **Figure 5. 1.43-inch display connection with PSOC&trade; Edge E84 Evaluation Kit**
-   
+
    ![](images/1_43_display_connection.png)
 
 <br>
@@ -151,7 +153,7 @@ See [Using the code example](docs/using_the_code_example.md) for instructions on
       `RECTANGLE_4_3_INCH`
 
    - **Dastek 1.43-inch 466*466 round MIPI DSI command mode display (MTB_DISPLAY_CO5300) and it's touch panel (MTB_CTP_FT6146):**<br>
-      `DASTEK_ROUND_1_43_INCH` <br> 
+      `DASTEK_ROUND_1_43_INCH` <br>
 
    - **Microtech 1.43-inch 466*466 round MIPI DSI command mode display (MTB_DISPLAY_CO5300) and it's touch panel (MTB_CTP_FT3268):**<br>
       `MICROTECH_ROUND_1_43_INCH` <br>
@@ -238,9 +240,10 @@ Document title: *CE242216* – *PSOC&trade; Edge MCU: Smartwatch demo using LVGL
  Version | Description of change
  ------- | ---------------------
  1.x.0   | New code example <br> Early access release
- 2.0.0   | GitHub release 
+ 2.0.0   | GitHub release
  2.0.1   | Performance improvement in 4.3-inch display usecase
- 2.1.0   | Updated design files to fix ModusToolbox&trade; v3.7 build warnings 
+ 2.1.0   | Updated design files to fix ModusToolbox&trade; v3.7 build warnings
+ 2.2.0   | Added support for LVGL v9.5.0
 <br>
 
 

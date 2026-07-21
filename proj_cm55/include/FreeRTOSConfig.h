@@ -78,7 +78,7 @@ extern uint32_t SystemCoreClock;
 #define configNUM_THREAD_LOCAL_STORAGE_POINTERS 5
 #define configENABLE_MVE                        0
 
-/* Compile-time macros to enable or disable TrustZone, Memory Protection Unit (MPU) and Floating Point Unit (FPU) support. */ 
+/* Compile-time macros to enable or disable TrustZone, Memory Protection Unit (MPU) and Floating Point Unit (FPU) support. */
 #if defined(MTB_SOFTFLOAT)
 #define configENABLE_FPU                        0
 #else
@@ -102,7 +102,11 @@ extern uint32_t SystemCoreClock;
 #define configUSE_DAEMON_TASK_STARTUP_HOOK      0
 
 /* Run time and task stats gathering related definitions. */
+#if LV_USE_DEMO_BENCHMARK
+#define configGENERATE_RUN_TIME_STATS           1
+#else
 #define configGENERATE_RUN_TIME_STATS           0
+#endif /* LV_USE_DEMO_BENCHMARK */
 #define configUSE_TRACE_FACILITY                1
 #define configUSE_STATS_FORMATTING_FUNCTIONS    0
 
@@ -193,7 +197,13 @@ standard names - or at least those used in the unmodified vector table. */
 /* Check if the ModusToolbox Device Configurator Power personality parameter
  * "System Idle Power Mode" is set to either "CPU Sleep" or "System Deep Sleep".
  */
-#if defined(CY_CFG_PWR_SYS_IDLE_MODE) && \
+#if LV_USE_DEMO_BENCHMARK
+/* Benchmark mode: disable tickless idle so the runtime-stats TCPWM timer
+ * keeps counting during idle periods. Deep-sleep stops the timer, which
+ * makes calculate_idle_percentage() return ~0 % and CPU appear as 100 %. */
+#define configUSE_TICKLESS_IDLE                 0
+
+#elif defined(CY_CFG_PWR_SYS_IDLE_MODE) && \
     ((CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_SLEEP) || \
     (CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_DEEPSLEEP))
 

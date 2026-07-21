@@ -54,10 +54,13 @@ VERBOSE=
 # ... then code in directories named COMPONENT_foo and COMPONENT_bar will be
 # added to the build
 #
-COMPONENTS+=FREERTOS RTOS_AWARE APP_LOGGER  
+COMPONENTS+=FREERTOS RTOS_AWARE APP_LOGGER
 
 ifeq ($(CONFIG_DISPLAY), DASTEK_ROUND_1_43_INCH)
+# Exclude Smartwatch GUI when running the benchmark demo
+ifneq ($(DEMO_BENCHMARK), 1)
 COMPONENTS += SMARTWATCH_ROUND_GUI
+endif
 DEFINES += MTB_DISPLAY_CO5300 MTB_CTP_FT6146
 # Ignore unused 4.3-inch display and touch driver files from compilation
 CY_IGNORE += $(SEARCH_display-dsi-waveshare-4-3-lcd)
@@ -66,7 +69,9 @@ CY_IGNORE += $(SEARCH_touch-ctp-ft5406)
 CY_IGNORE += $(SEARCH_touch-ctp-ft3268)
 
 else ifeq ($(CONFIG_DISPLAY), MICROTECH_ROUND_1_43_INCH)
+ifneq ($(DEMO_BENCHMARK), 1)
 COMPONENTS += SMARTWATCH_ROUND_GUI
+endif
 DEFINES += MTB_DISPLAY_CO5300 MTB_CTP_FT3268
 # Ignore unused 4.3-inch display and touch driver files from compilation
 CY_IGNORE += $(SEARCH_display-dsi-waveshare-4-3-lcd)
@@ -75,7 +80,9 @@ CY_IGNORE += $(SEARCH_touch-ctp-ft5406)
 CY_IGNORE += $(SEARCH_touch-ctp-ft6146-m00)
 
 else ifeq ($(CONFIG_DISPLAY), RECTANGLE_4_3_INCH)
+ifneq ($(DEMO_BENCHMARK), 1)
 COMPONENTS += SMARTWATCH_RECTANGLE_GUI
+endif
 DEFINES += W4P3INCH_DISP MTB_CTP_FT5406
 # Ignore unused 1.43-inch display and touch driver files from compilation
 CY_IGNORE += $(SEARCH_display-amoled-co5300)
@@ -102,20 +109,92 @@ SOURCES+=
 INCLUDES+=
 
 # Add additional defines to the build process (without a leading -D).
-# Enable frames-per-second (fps) measurement by adding "USE_PERFORMANCE_MONITOR" 
+# Enable frames-per-second (fps) measurement by adding "USE_PERFORMANCE_MONITOR"
 # in the DEFINES.
 DEFINES+=CY_RETARGET_IO_CONVERT_LF_TO_CRLF _BAREMETAL=0 APP_LOG_PRINT_EN
+DEFINES+=LV_USE_DEMO_BENCHMARK=$(DEMO_BENCHMARK)
 # DEFINES+=USE_PERFORMANCE_MONITOR
-# Ignore unused LVGL middleware files from compilation
-CY_IGNORE += $(SEARCH_lvgl)/src/others/vg_lite_tvg $(SEARCH_lvgl)/src/libs/thorvg $(SEARCH_lvgl)/tests 
-CY_IGNORE += $(SEARCH_lvgl)/draw/nxp $(SEARCH_lvgl)/draw/renesas $(SEARCH_lvgl)/examples 
-#$(SEARCH_lvgl)/src/draw/vg_lite/lv_draw_vg_lite.c $(SEARCH_lvgl)/src/draw/vg_lite/lv_vg_lite_utils.c $(SEARCH_lvgl)/src/draw/vg_lite/lv_draw_vg_lite_img.c
-CY_IGNORE += $(SEARCH_lvgl)/draw/nxp $(SEARCH_lvgl)/draw/renesas $(SEARCH_lvgl)/examples 
-CY_IGNORE += $(SEARCH_lvgl)/src/draw/vg_lite/lv_draw_vg_lite.c $(SEARCH_lvgl)/src/draw/vg_lite/lv_vg_lite_utils.c
-CY_IGNORE += $(SEARCH_lvgl)/src/draw/vg_lite/lv_draw_vg_lite_img.c $(SEARCH_lvgl)/src/draw/sw/blend/helium
-CY_IGNORE += $(SEARCH_lvgl)/src/draw/sw/blend/helium $(SEARCH_lvgl)/src/core/lv_refr.c
-CY_IGNORE += $(SEARCH_lvgl)/src/draw/sw/blend/neon
 
+# Ignore unused LVGL middleware files from compilation
+# --- Platform-specific draw backends (not needed for PSoC Edge) ---
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/nxp
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/renesas
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/dma2d
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/espressif
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/eve
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/nanovg
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/nema_gfx
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/opengles
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/sdl
+# Unused converts (premultiply uses C fallback; blend uses helium)
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/convert/helium
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/convert/neon
+# --- Architecture-specific SW blend (not for CM55) ---
+# Helium is ENABLED: ignore other MVE acceleration
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/sw/blend/neon
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/sw/blend/arm2d
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/sw/blend/riscv_v
+# --- Unused libraries ---
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/thorvg
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/FT800-FT813
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/frogfs
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/gltf
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/gstreamer
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/libwebp
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/nanovg
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/svg
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/vg_lite_driver
+# --- Unused debugging/test/simulator ---
+CY_IGNORE += $(SEARCH_lvgl)/src/debugging/test
+CY_IGNORE += $(SEARCH_lvgl)/src/debugging/vg_lite_tvg
+CY_IGNORE += $(SEARCH_lvgl)/src/debugging/monkey
+# --- Unused test suites, examples, env support ---
+CY_IGNORE += $(SEARCH_lvgl)/tests
+CY_IGNORE += $(SEARCH_lvgl)/examples
+CY_IGNORE += $(SEARCH_lvgl)/env_support
+# --- Unused display/input/draw drivers (we use custom lv_port_disp/indev) ---
+CY_IGNORE += $(SEARCH_lvgl)/src/drivers
+# --- Unused libraries (ignoring saves significant ITCM) ---
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/barcode
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/ffmpeg
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/freetype
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/fsdrv
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/gif
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/libjpeg_turbo
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/libpng
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/lz4
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/rlottie
+CY_IGNORE += $(SEARCH_lvgl)/src/libs/tiny_ttf
+# --- Unused widgets ---
+CY_IGNORE += $(SEARCH_lvgl)/src/widgets/property
+CY_IGNORE += $(SEARCH_lvgl)/src/widgets/3dtexture
+CY_IGNORE += $(SEARCH_lvgl)/src/widgets/gif
+CY_IGNORE += $(SEARCH_lvgl)/src/widgets/lottie
+CY_IGNORE += $(SEARCH_lvgl)/src/widgets/arclabel
+# --- Unused stdlib variants ---
+CY_IGNORE += $(SEARCH_lvgl)/src/stdlib/micropython
+CY_IGNORE += $(SEARCH_lvgl)/src/stdlib/rtthread
+CY_IGNORE += $(SEARCH_lvgl)/src/stdlib/uefi
+# --- Unused font manager ---
+CY_IGNORE += $(SEARCH_lvgl)/src/font/font_manager
+# --- Unused demos ---
+CY_IGNORE += $(SEARCH_lvgl)/demos/gltf
+CY_IGNORE += $(SEARCH_lvgl)/demos/render
+CY_IGNORE += $(SEARCH_lvgl)/demos/vector_graphic
+CY_IGNORE += $(SEARCH_lvgl)/demos/keypad_encoder
+CY_IGNORE += $(SEARCH_lvgl)/demos/stress
+# --- Ignore mtb_shared originals; patched versions are in proj_cm55 ---
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/vg_lite/lv_draw_vg_lite.c
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/vg_lite/lv_draw_vg_lite_img.c
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/vg_lite/lv_vg_lite_utils.c
+# --- Helium convert: local override skips helium premultiply (uses C fallback) ---
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/convert/lv_draw_buf_convert.c
+
+# IAR assembler cannot process GCC-style C preprocessing in .S files
+# The LVGL helium blend assembly is not compatible with IAR
+ifeq ($(TOOLCHAIN), IAR)
+CY_IGNORE += $(SEARCH_lvgl)/src/draw/sw/blend/helium
+endif
 
 # Select softfp or hardfp floating point. Default is softfp.
 VFP_SELECT+=
@@ -139,7 +218,10 @@ CXXFLAGS+=
 ASFLAGS+=
 
 # Additional / custom linker flags.
-LDFLAGS+=
+# Suppress GNU-stack warning emitted by Helium blend assembly
+ifeq ($(TOOLCHAIN), GCC_ARM)
+LDFLAGS+=-Wl,--no-warn-execstack
+endif
 
 # Additional / custom libraries to link in to the application.
 LDLIBS+=
@@ -165,10 +247,10 @@ CY_APP_PATH=
 
 # Relative path to the shared repo location.
 #
-# All .mtb files have the format, <URI>#<COMMIT>#<LOCATION>. If the <LOCATION> 
-# field begins with $$ASSET_REPO$$, then the repo is deposited in the path 
-# specified by the CY_GETLIBS_SHARED_PATH variable. The default location is one 
-# directory level above the current app directory. This is used with 
+# All .mtb files have the format, <URI>#<COMMIT>#<LOCATION>. If the <LOCATION>
+# field begins with $$ASSET_REPO$$, then the repo is deposited in the path
+# specified by the CY_GETLIBS_SHARED_PATH variable. The default location is one
+# directory level above the current app directory. This is used with
 # CY_GETLIBS_SHARED_NAME variable, which specifies the directory name.
 CY_GETLIBS_SHARED_PATH=../..
 

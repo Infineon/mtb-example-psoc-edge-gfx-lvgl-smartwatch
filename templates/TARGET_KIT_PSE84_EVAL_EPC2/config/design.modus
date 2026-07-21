@@ -1665,10 +1665,10 @@
                     <Parameters>
                         <Param id="base_addr1" value="0x240FD000"/>
                         <Param id="base_addr2" value="0x26200000"/>
-                        <Param id="base_addr3" value="0x26240000"/>
+                        <Param id="base_addr3" value="0x26260000"/>
                         <Param id="cacheable0" value="4"/>
                         <Param id="cacheable1" value="4"/>
-                        <Param id="cacheable2" value="4"/>
+                        <Param id="cacheable2" value="15"/>
                         <Param id="cacheable3" value="4"/>
                         <Param id="cacheable4" value="4"/>
                         <Param id="cacheable5" value="4"/>
@@ -1708,8 +1708,8 @@
                         <Param id="shareable2" value="false"/>
                         <Param id="shareable3" value="false"/>
                         <Param id="size1" value="0x00003000"/>
-                        <Param id="size2" value="0x00040000"/>
-                        <Param id="size3" value="0x002C0000"/>
+                        <Param id="size2" value="0x00060000"/>
+                        <Param id="size3" value="0x002A0000"/>
                         <Param id="writable1" value="true"/>
                         <Param id="writable2" value="true"/>
                         <Param id="writable3" value="true"/>
@@ -2346,7 +2346,7 @@
                         <Param id="offset" value="0x00040000"/>
                         <Param id="regionId" value="m55_data_secondary"/>
                         <Param id="reservedGuid" value="USER_DEFINED"/>
-                        <Param id="size" value="0x001C0000"/>
+                        <Param id="size" value="0x00180000"/>
                     </Parameters>
                 </Personality>
                 <Personality template="memory_region_data" version="1.0" instance="0zJXEr6pka4">
@@ -2355,7 +2355,7 @@
                         <Param id="description" value="Shared region between CM33 and CM55"/>
                         <Param id="domain" value="Rj_rAX1eb8U"/>
                         <Param id="memoryId" value="SOCMEM_RAM"/>
-                        <Param id="offset" value="0x00200000"/>
+                        <Param id="offset" value="0x001C0000"/>
                         <Param id="regionId" value="m33_m55_shared"/>
                         <Param id="reservedGuid" value="USER_DEFINED"/>
                         <Param id="size" value="0x00040000"/>
@@ -2367,10 +2367,10 @@
                         <Param id="description" value="Graphics data"/>
                         <Param id="domain" value="Rj_rAX1eb8U"/>
                         <Param id="memoryId" value="SOCMEM_RAM"/>
-                        <Param id="offset" value="0x00240000"/>
+                        <Param id="offset" value="0x00200000"/>
                         <Param id="regionId" value="gfx_mem"/>
                         <Param id="reservedGuid" value="USER_DEFINED"/>
-                        <Param id="size" value="0x002C0000"/>
+                        <Param id="size" value="0x00300000"/>
                     </Parameters>
                 </Personality>
                 <Personality template="memory_region_data" version="1.0" instance="_Hf5ER1SoPM">

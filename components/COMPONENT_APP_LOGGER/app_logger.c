@@ -304,6 +304,9 @@ void performance_monitor_callback(TimerHandle_t timer)
     uint32_t current_time_ms = 0;
     uint32_t elapsed_time_ms = 0;
     uint32_t fps          = 0;
+#if ( configGENERATE_RUN_TIME_STATS == 1 )
+    uint8_t cpu_usage = 0U;
+#endif
 
     CY_UNUSED_PARAMETER(timer);
 
@@ -313,8 +316,12 @@ void performance_monitor_callback(TimerHandle_t timer)
     /* Calculate FPS */
     fps = (1000 * frame_count) / elapsed_time_ms;
 
-    app_log_print("\rFPS: %3u | CPU usage: %3u%%", (unsigned int) fps,
-    (uint8_t)(100 - calculate_idle_percentage()));
+#if ( configGENERATE_RUN_TIME_STATS == 1 )
+    cpu_usage = (uint8_t)(100U - calculate_idle_percentage());
+    app_log_print("\rFPS: %3u | CPU usage: %3u%%", (unsigned int)fps, cpu_usage);
+#else
+    app_log_print("\rFPS: %3u", (unsigned int)fps);
+#endif
     fflush(stdout);
 
     /* Reset variables for the next calculation */

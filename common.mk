@@ -27,7 +27,7 @@ MTB_TYPE=PROJECT
 
 # Target board/hardware (BSP).
 # To change the target, it is recommended to use the Library manager
-# ('make library-manager' from command line), which will also update 
+# ('make library-manager' from command line), which will also update
 # Eclipse IDE launch configurations.
 TARGET=KIT_PSE84_EVAL_EPC2
 
@@ -46,19 +46,28 @@ TOOLCHAIN=GCC_ARM
 # Debug -- build with minimal optimizations, focus on debugging.
 # Release -- build with full optimizations
 # Custom -- build with custom configuration, set the optimization flag in CFLAGS
-# 
-# If CONFIG is manually edited, ensure to update or regenerate 
+#
+# If CONFIG is manually edited, ensure to update or regenerate
 # launch configurations for your IDE.
 CONFIG=Debug
+
+# Set "DEMO_BENCHMARK" to execute the LVGL benchmark demo.
+# When enabled, the build configuration is automatically set to Release
+# for accurate performance measurements.
+DEMO_BENCHMARK?=0
+
+ifeq ($(DEMO_BENCHMARK), 1)
+override CONFIG=Release
+endif
 
 ############################# Display module ###################################
 # Option to choose the display module to realize the smartwatch application.
 # Select one of them as per the required use-case.
-# DASTEK_ROUND_1_43_INCH    - Dastek 1.43-inch 466*466 round MIPI DSI   
+# DASTEK_ROUND_1_43_INCH    - Dastek 1.43-inch 466*466 round MIPI DSI
 #                             command mode display
-# MICROTECH_ROUND_1_43_INCH - Microtech 1.43-inch 466*466 round MIPI DSI 
+# MICROTECH_ROUND_1_43_INCH - Microtech 1.43-inch 466*466 round MIPI DSI
 #                             command mode display
-# RECTANGLE_4_3_INCH	    - Waveshare 4.3-inch 800*480 Raspberry-Pi MIPI DSI 
+# RECTANGLE_4_3_INCH	    - Waveshare 4.3-inch 800*480 Raspberry-Pi MIPI DSI
 #                             video mode display
 # Ex:
 #   CONFIG_DISPLAY = DASTEK_ROUND_1_43_INCH
@@ -67,6 +76,11 @@ CONFIG=Debug
 #   or
 #   CONFIG_DISPLAY = RECTANGLE_4_3_INCH
 CONFIG_DISPLAY = RECTANGLE_4_3_INCH
+
+# Suppress L6439W (multiply defined weak symbol) for ARM toolchain
+ifeq ($(TOOLCHAIN), ARM)
+LDFLAGS+=--diag_suppress=L6439W
+endif
 
 ################################################################################
 # Advanced Configuration

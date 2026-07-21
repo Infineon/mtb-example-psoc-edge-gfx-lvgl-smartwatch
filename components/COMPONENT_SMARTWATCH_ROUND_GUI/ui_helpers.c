@@ -59,9 +59,9 @@ void _ui_screen_change(lv_obj_t ** target, lv_screen_load_anim_t fademode, int s
 
 void _ui_screen_delete(lv_obj_t ** target)
 {
-    if(*target == NULL) {
+    if(*target != NULL) {
         lv_obj_delete(*target);
-        target = NULL;
+        *target = NULL;
     }
 }
 
@@ -101,12 +101,14 @@ void _ui_flag_modify(lv_obj_t * target, int32_t flag, int value)
 }
 void _ui_state_modify(lv_obj_t * target, int32_t state, int value)
 {
+    lv_state_t obj_state = (lv_state_t)state;
+
     if(value == _UI_MODIFY_STATE_TOGGLE) {
-        if(lv_obj_has_state(target, state)) lv_obj_remove_state(target, state);
-        else lv_obj_add_state(target, state);
+        if(lv_obj_has_state(target, obj_state)) lv_obj_remove_state(target, obj_state);
+        else lv_obj_add_state(target, obj_state);
     }
-    else if(value == _UI_MODIFY_STATE_ADD) lv_obj_add_state(target, state);
-    else lv_obj_remove_state(target, state);
+    else if(value == _UI_MODIFY_STATE_ADD) lv_obj_add_state(target, obj_state);
+    else lv_obj_remove_state(target, obj_state);
 }
 
 
@@ -133,7 +135,7 @@ void scr_unloaded_delete_cb(lv_event_t * e)
 
 void _ui_opacity_set(lv_obj_t * target, int val)
 {
-    lv_obj_set_style_opa(target, val, 0);
+    lv_obj_set_style_opa(target, val, LV_PART_MAIN);
 }
 
 void _ui_anim_callback_free_user_data(lv_anim_t * a)
@@ -187,7 +189,7 @@ void _ui_anim_callback_set_opacity(lv_anim_t * a, int32_t v)
 {
 
     ui_anim_user_data_t * usr = (ui_anim_user_data_t *)a->user_data;
-    lv_obj_set_style_opa(usr->target, v, 0);
+    lv_obj_set_style_opa(usr->target, v, LV_PART_MAIN);
 
 }
 
@@ -269,7 +271,7 @@ int32_t _ui_anim_callback_get_opacity(lv_anim_t * a)
 {
 
     ui_anim_user_data_t * usr = (ui_anim_user_data_t *)a->user_data;
-    return lv_obj_get_style_opa(usr->target, 0);
+    return (int32_t)lv_obj_get_style_opa(usr->target, LV_PART_MAIN);
 
 }
 
@@ -344,5 +346,4 @@ void _ui_switch_theme(int val)
     ui_theme_set(val);
 #endif
 }
-
 

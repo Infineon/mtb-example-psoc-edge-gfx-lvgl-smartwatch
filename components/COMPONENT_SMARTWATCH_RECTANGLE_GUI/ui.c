@@ -46,7 +46,7 @@ lv_anim_t * DigitClockTimeDotsAnim_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_playback_delay(&PropertyAnimation_0, 0);
     lv_anim_set_repeat_count(&PropertyAnimation_0, LV_ANIM_REPEAT_INFINITE);
     lv_anim_set_repeat_delay(&PropertyAnimation_0, 0);
-    lv_anim_set_early_apply(&PropertyAnimation_0, false);
+    lv_anim_set_early_apply(&PropertyAnimation_0, true);
     lv_anim_set_get_value_cb(&PropertyAnimation_0, &_ui_anim_callback_get_opacity);
     out_anim = lv_anim_start(&PropertyAnimation_0);
 
@@ -71,7 +71,7 @@ lv_anim_t * AnalogClockSecHandAnim_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_playback_delay(&PropertyAnimation_0, 0);
     lv_anim_set_repeat_count(&PropertyAnimation_0, LV_ANIM_REPEAT_INFINITE);
     lv_anim_set_repeat_delay(&PropertyAnimation_0, 0);
-    lv_anim_set_early_apply(&PropertyAnimation_0, false);
+    lv_anim_set_early_apply(&PropertyAnimation_0, true);
     lv_anim_set_get_value_cb(&PropertyAnimation_0, &_ui_anim_callback_get_image_angle);
     out_anim = lv_anim_start(&PropertyAnimation_0);
 
@@ -96,7 +96,7 @@ lv_anim_t * AnalogClockMinHandAnim_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_playback_delay(&PropertyAnimation_0, 0);
     lv_anim_set_repeat_count(&PropertyAnimation_0, 0);
     lv_anim_set_repeat_delay(&PropertyAnimation_0, 0);
-    lv_anim_set_early_apply(&PropertyAnimation_0, false);
+    lv_anim_set_early_apply(&PropertyAnimation_0, true);
     lv_anim_set_get_value_cb(&PropertyAnimation_0, &_ui_anim_callback_get_image_angle);
     out_anim = lv_anim_start(&PropertyAnimation_0);
 
@@ -121,7 +121,7 @@ lv_anim_t * AnalogClockHourHandAnim_Animation(lv_obj_t * TargetObject, int delay
     lv_anim_set_playback_delay(&PropertyAnimation_0, 0);
     lv_anim_set_repeat_count(&PropertyAnimation_0, 0);
     lv_anim_set_repeat_delay(&PropertyAnimation_0, 0);
-    lv_anim_set_early_apply(&PropertyAnimation_0, false);
+    lv_anim_set_early_apply(&PropertyAnimation_0, true);
     lv_anim_set_get_value_cb(&PropertyAnimation_0, &_ui_anim_callback_get_image_angle);
     out_anim = lv_anim_start(&PropertyAnimation_0);
 
@@ -146,7 +146,7 @@ lv_anim_t * WindAnimation_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_playback_delay(&PropertyAnimation_0, 0);
     lv_anim_set_repeat_count(&PropertyAnimation_0, LV_ANIM_REPEAT_INFINITE);
     lv_anim_set_repeat_delay(&PropertyAnimation_0, 0);
-    lv_anim_set_early_apply(&PropertyAnimation_0, false);
+    lv_anim_set_early_apply(&PropertyAnimation_0, true);
     lv_anim_set_get_value_cb(&PropertyAnimation_0, &_ui_anim_callback_get_x);
     out_anim = lv_anim_start(&PropertyAnimation_0);
 
@@ -171,7 +171,7 @@ lv_anim_t * HeartBeatAnim_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_playback_delay(&PropertyAnimation_0, 0);
     lv_anim_set_repeat_count(&PropertyAnimation_0, LV_ANIM_REPEAT_INFINITE);
     lv_anim_set_repeat_delay(&PropertyAnimation_0, 0);
-    lv_anim_set_early_apply(&PropertyAnimation_0, false);
+    lv_anim_set_early_apply(&PropertyAnimation_0, true);
     lv_anim_set_get_value_cb(&PropertyAnimation_0, &_ui_anim_callback_get_image_zoom);
     out_anim = lv_anim_start(&PropertyAnimation_0);
 
@@ -196,7 +196,7 @@ lv_anim_t * MusicTitleScrollAnim_Animation(lv_obj_t * TargetObject, int delay)
     lv_anim_set_playback_delay(&PropertyAnimation_0, 0);
     lv_anim_set_repeat_count(&PropertyAnimation_0, LV_ANIM_REPEAT_INFINITE);
     lv_anim_set_repeat_delay(&PropertyAnimation_0, 0);
-    lv_anim_set_early_apply(&PropertyAnimation_0, false);
+    lv_anim_set_early_apply(&PropertyAnimation_0, true);
     lv_anim_set_get_value_cb(&PropertyAnimation_0, &_ui_anim_callback_get_x);
     out_anim = lv_anim_start(&PropertyAnimation_0);
 

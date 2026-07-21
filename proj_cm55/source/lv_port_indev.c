@@ -127,7 +127,6 @@ mtb_ctp_ft5406_config_t ctp_ft5406_cfg = {
 void LV_ATTRIBUTE_FAST_MEM mtb_ctp_ft6146_interrupt_handler(void)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
     if (Cy_GPIO_GetInterruptStatus(ctp_ft6146_cfg.int_port, ctp_ft6146_cfg.int_pin))
     {
         ctp_ft6146_cfg.touch_event = true;
@@ -213,14 +212,10 @@ LV_ATTRIBUTE_FAST_MEM void touchpad_init(void)
 * Function Name: touchpad_read
 ********************************************************************************
 * Summary:
-*  Touchpad read function called by the LVGL library.
-*  Here you will find example implementation of input devices supported by
-*  LVGL:
-*   - Touchpad
-*
-*   The `..._read()` function are only examples.
-*   You should shape them according to your hardware.
-*
+*  Touchpad read function called periodically by the LVGL library. It returns
+*  the latest touch state and coordinates from the cache populated by the
+*  background touch polling task, so it performs no I2C access and never blocks
+*  the rendering thread.
 *
 * Parameters:
 *  *indev_drv: Pointer to the input driver structure to be registered by LVGL.
@@ -300,7 +295,7 @@ LV_ATTRIBUTE_FAST_MEM void touchpad_read(lv_indev_t *indev_drv, lv_indev_data_t 
 *******************************************************************************/
 void lv_port_indev_init(void)
 {
-    /* Initialize your touchpad if you have. */
+    /* Initialize the touch controller hardware */
     touchpad_init();
 
     /* Register a touchpad input device */

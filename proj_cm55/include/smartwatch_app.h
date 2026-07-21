@@ -73,9 +73,9 @@ extern "C" {
 #define MAX_BRIGHTNESS_PERCENT              (100U)
 #define MIN_BRIGHTNESS_PERCENT              (10U)
 
-/* Macro to calculate brightness count. 
- * 255 is the max PWM period for 7" display. 
- * The max value of brightness control register for 1.43" round display is 255. 
+/* Macro to calculate brightness count.
+ * 255 is the max PWM period for 4.3" display.
+ * The max value of brightness control register for 1.43" round display is 255.
  */
 #define SET_BRIGHTNESS(percentage)       ((uint8_t)(((percentage) * 255) / 100))
 
@@ -89,6 +89,7 @@ extern cy_stc_gfx_context_t gfx_context;
 extern cy_stc_scb_i2c_context_t i2c_context;
 #if defined(MTB_DISPLAY_CO5300)
 extern TimerHandle_t lp_task_timer;
+extern cy_stc_syspm_callback_t gfx_deep_sleep_callback_cfg;
 #endif /*defined(MTB_DISPLAY_CO5300)*/
 
 /*******************************************************************************

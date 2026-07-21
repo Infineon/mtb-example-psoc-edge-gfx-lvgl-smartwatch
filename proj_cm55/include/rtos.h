@@ -69,16 +69,18 @@ extern "C" {
 #define STEP_COUNT_TASK_NAME                ("Step Count Task")
 
 /* stack size in words */
-#define APP_TASK_STACK_SIZE                 ((configMINIMAL_STACK_SIZE) * 3)
+#if LV_USE_DEMO_BENCHMARK
+#define APP_TASK_STACK_SIZE                 ((configMINIMAL_STACK_SIZE) * 16)
+#else
+#define APP_TASK_STACK_SIZE                 ((configMINIMAL_STACK_SIZE) * 4)
+#endif /* LV_USE_DEMO_BENCHMARK */
 #define APP_STATE_MANAGER_TASK_STACK_SIZE   (configMINIMAL_STACK_SIZE * 2)
 #define TIME_DATE_TASK_STACK_SIZE           (configMINIMAL_STACK_SIZE)
 #define STEP_COUNT_TASK_STACK_SIZE          (configMINIMAL_STACK_SIZE)
 
 #if defined(MTB_DISPLAY_CO5300)
 #define INPUT_INACTIVITY_TIMER_NAME         ("Input Inactivity Timer")
-#define FRAME_TX_TASK_PRIORITY              (configMAX_PRIORITIES * 3 / 7)
-#define FRAME_TX_TASK_NAME                  ("Frame Tx Task")
-#define FRAME_TX_TASK_STACK_SIZE            ((configMINIMAL_STACK_SIZE) / 2)
+#define DC_DBI_INT_PRIORITY                 (3U)
 #endif /* MTB_DISPLAY_CO5300 */
 
 #if defined(W4P3INCH_DISP)
@@ -96,7 +98,7 @@ extern TaskHandle_t rtos_app_task_handle;
 extern TaskHandle_t rtos_app_state_manager_task_handle;
 
 #if defined(MTB_DISPLAY_CO5300)
-extern TaskHandle_t rtos_frame_tx_task_handle;
+extern SemaphoreHandle_t frame_tx_sem;
 #endif /* MTB_DISPLAY_CO5300 */
 
 extern SemaphoreHandle_t lvgl_mutex;

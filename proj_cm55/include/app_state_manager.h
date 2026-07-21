@@ -68,6 +68,8 @@ extern volatile bool state_change_complete;
 
 #if defined(MTB_DISPLAY_CO5300)
 extern volatile bool display_active_timeout;
+extern volatile bool dbi_transfer_enabled;
+extern volatile bool dbi_transfer_in_flight;
 #endif /* MTB_DISPLAY_CO5300 */
 
 
@@ -78,7 +80,7 @@ extern volatile bool display_active_timeout;
 BaseType_t input_inactivity_timer_start(void);
 #elif defined(W4P3INCH_DISP)
 void user_button_1_interrupt_handler(void);
-#endif 
+#endif
 
 void app_state_manager_task(void *arg);
 

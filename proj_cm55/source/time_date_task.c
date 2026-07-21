@@ -42,9 +42,11 @@
 #include <time_date_task.h>
 #include "cybsp.h"
 #include "cycfg.h"
-#include "ui.h"
 #include "app_logger.h"
 #include "app_state_manager.h"
+#if !LV_USE_DEMO_BENCHMARK
+#include "ui.h"
+#endif
 
 
 /*******************************************************************************
@@ -144,7 +146,9 @@ void time_date_task(void *arg)
 
         if (pdTRUE == xSemaphoreTake(lvgl_mutex, portMAX_DELAY))
         {
+#if !LV_USE_DEMO_BENCHMARK
             ui_time_cb(date_time);
+#endif
             xSemaphoreGive(lvgl_mutex);
         }
 #if defined(MTB_DISPLAY_CO5300)

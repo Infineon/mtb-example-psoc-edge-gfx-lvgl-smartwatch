@@ -42,9 +42,11 @@
 #include "cybsp.h"
 #include "step_count_task.h"
 #include <stdlib.h>
-#include "ui.h"
 #include "app_logger.h"
 #include "app_state_manager.h"
+#if !LV_USE_DEMO_BENCHMARK
+#include "ui.h"
+#endif
 
 
 /*******************************************************************************
@@ -139,8 +141,10 @@ void step_count_task(void *arg)
 
         if (pdTRUE == xSemaphoreTake(lvgl_mutex, portMAX_DELAY))
         {
+#if !LV_USE_DEMO_BENCHMARK
             ui_step_cb(step_count);
             ui_health_screen_cb();
+#endif
             xSemaphoreGive(lvgl_mutex);
         }
 #if defined(MTB_DISPLAY_CO5300)

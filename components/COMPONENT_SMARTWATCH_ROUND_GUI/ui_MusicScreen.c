@@ -62,7 +62,7 @@ void ui_MusicScreen_screen_init(void)
     lv_obj_set_style_bg_color(ui_MusicScreen, lv_color_hex(0x000000), (lv_style_selector_t)LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ui_MusicScreen, (lv_opa_t)255, (lv_style_selector_t)LV_PART_MAIN);
     lv_obj_set_style_bg_image_src(ui_MusicScreen, &ui_img_music_play_button_50_50_no_bg_png,
-                                  (lv_style_selector_t)(LV_PART_MAIN | LV_STATE_CHECKED));
+                                  ((lv_style_selector_t)LV_PART_MAIN | (lv_style_selector_t)LV_STATE_CHECKED));
 
     ui_MusicTitleLabel = lv_label_create(ui_MusicScreen);
     lv_obj_set_width(ui_MusicTitleLabel, 297);
@@ -85,7 +85,8 @@ void ui_MusicScreen_screen_init(void)
     lv_obj_remove_flag(ui_MusicPrevButtonPanel, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_style_radius(ui_MusicPrevButtonPanel, 0, (lv_style_selector_t)LV_PART_MAIN);
     lv_obj_set_style_bg_color(ui_MusicPrevButtonPanel, lv_color_hex(0x000000), (lv_style_selector_t)LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(ui_MusicPrevButtonPanel, (lv_opa_t)125, LV_PART_MAIN | (lv_style_selector_t)LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_MusicPrevButtonPanel, (lv_opa_t)125,
+                            ((lv_style_selector_t)LV_PART_MAIN | (lv_style_selector_t)LV_STATE_DEFAULT));
     lv_obj_set_style_bg_image_src(ui_MusicPrevButtonPanel, &ui_img_music_prev_button_50_60_no_bg_png,
                                   (lv_style_selector_t)LV_PART_MAIN);
     lv_obj_set_style_border_side(ui_MusicPrevButtonPanel, LV_BORDER_SIDE_NONE, (lv_style_selector_t)LV_PART_MAIN);
@@ -105,7 +106,7 @@ void ui_MusicScreen_screen_init(void)
                                   (lv_style_selector_t)LV_PART_MAIN);
     lv_obj_set_style_border_side(ui_MusicPausePlayButtonPanel, LV_BORDER_SIDE_NONE, (lv_style_selector_t)LV_PART_MAIN);
     lv_obj_set_style_bg_image_src(ui_MusicPausePlayButtonPanel, &ui_img_music_play_button_50_50_no_bg_png,
-                                  (lv_style_selector_t)(LV_PART_MAIN | LV_STATE_CHECKED));
+                                  ((lv_style_selector_t)LV_PART_MAIN | (lv_style_selector_t)LV_STATE_CHECKED));
 
     ui_MusicNextButtonPanel = lv_obj_create(ui_MusicScreen);
     lv_obj_set_width(ui_MusicNextButtonPanel, 57);

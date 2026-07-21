@@ -2,7 +2,7 @@
 * File Name        : app_state_manager.c
 *
 * Description      : This file implements functions to handle application state
-*                    change, application state manager task, input activity 
+*                    change, application state manager task, input activity
 *                    timer callback and PLL configuration.
 *
 * Related Document : See README.md
@@ -41,14 +41,17 @@
 * Header Files
 *******************************************************************************/
 #include "cybsp.h"
+#include "cycfg_peripherals.h"
 
 #include "app_state_manager.h"
 #include "smartwatch_app.h"
 #include "lv_port_disp.h"
-#include "ui.h"
 #include "lv_draw_sw.h"
 #include "lv_port_disp.h"
 #include "lv_api_map_v8.h"
+#if !LV_USE_DEMO_BENCHMARK
+#include "ui.h"
+#endif
 
 #if defined(MTB_DISPLAY_CO5300)
 #include "mtb_display_co5300.h"
@@ -66,9 +69,9 @@
 #define DPLL_ECO_INPUT_FREQ_HZ           (17203200U)
 
 /* DPLL LP frequency:
- * In HP mode  = 400 MHz 
- * In LP mode  = 140 MHz 
- * In ULP mode = 50 MHz 
+ * In HP mode  = 400 MHz
+ * In LP mode  = 140 MHz
+ * In ULP mode = 50 MHz
  */
 #define DPLL_LP0_OUTPUT_FREQ_HP_HZ       (400000000U)
 #define DPLL_LP1_OUTPUT_FREQ_HP_HZ       (300000000U)
@@ -108,6 +111,8 @@ volatile bool gpu_enable = true;
 #if defined(MTB_DISPLAY_CO5300)
 TimerHandle_t input_inactivity_timer = NULL;
 volatile bool display_active_timeout = false;
+volatile bool dbi_transfer_enabled = true;
+volatile bool dbi_transfer_in_flight = false;
 #endif /* MTB_DISPLAY_CO5300 */
 
 /*******************************************************************************
@@ -186,12 +191,12 @@ void dpll_lp1_set_freq(uint32_t freq)
 * Function Name: app_state_update
 ********************************************************************************
 * Summary:
-*  Configures and manages clock settings, graphics subsystem, display brightness 
-*  and screen/UI change in the corresponding application state for optimal 
+*  Configures and manages clock settings, graphics subsystem, display brightness
+*  and screen/UI change in the corresponding application state for optimal
 *  system performance and power consumption.
 *
 * Parameters:
-*  state: Application state 
+*  state: Application state
 *
 * Return:
 *  void
@@ -202,13 +207,32 @@ static void app_state_update(application_states_t state)
     cy_en_gfx_status_t result;
     vg_lite_error_t stat;
     lv_display_t *cur = NULL;
-    
+
 #if defined(MTB_DISPLAY_CO5300)
     cy_en_syspm_status_t status;
 #endif /*defined(MTB_DISPLAY_CO5300)*/
 
     if (pdTRUE == xSemaphoreTake(lvgl_mutex, portMAX_DELAY))
     {
+#if defined(MTB_DISPLAY_CO5300)
+        /* Disable DC interrupt after acquiring lvgl_mutex to prevent deadlock.
+         * If disabled before the mutex, an in-flight async DBI transfer in
+         * disp_flush() (holding lvgl_mutex, waiting on frame_tx_sem) would
+         * never complete because the ISR is killed, deadlocking both tasks.
+         * In LP mode DC_IRQ is already disabled (blocking transfer), so this
+         * is a harmless no-op.
+         */
+        NVIC_DisableIRQ(GFXSS_DC_IRQ);
+        if (dbi_transfer_in_flight)
+        {
+            /* The completion callback will never fire - balance its
+             * DeepSleep unlock and semaphore give here. */
+            dbi_transfer_in_flight = false;
+            mtb_hal_syspm_unlock_deepsleep();
+        }
+        xSemaphoreGive(frame_tx_sem);
+#endif /* MTB_DISPLAY_CO5300 */
+
         Cy_GFXSS_Interrupt(base, &gfx_context);
 #if defined(MTB_DISPLAY_CO5300)
         stop_and_reset_timer();
@@ -226,8 +250,8 @@ static void app_state_update(application_states_t state)
                 performance_monitor_resume();
 #endif /* USE_PERFORMANCE_MONITOR */
                 /* Prevent CPU to go to DeepSleep
-                 * to achieve high refresh rate and in that case 
-                 * CPU has to handover the framebuffer to DC at every 16 ms                
+                 * to achieve high refresh rate and in that case
+                 * CPU has to handover the framebuffer to DC at every 16 ms
                  */
                 mtb_hal_syspm_lock_deepsleep();
 
@@ -237,12 +261,25 @@ static void app_state_update(application_states_t state)
                 /* System SRAM (SoCMEM) Idle Power Mode Configuration */
                 Cy_SysPm_SetSOCMEMDeepSleepMode(CY_SYSPM_MODE_DEEPSLEEP_NONE);
 
+#if defined(MTB_DISPLAY_CO5300)
+                /* Re-register the GFXSS DeepSleep callback (was unregistered
+                 * during ULP to prevent MIPIDSI restoration that blocks touch).
+                 * Unregister first to handle the LP->HP path where the callback
+                 * was never removed. */
+                Cy_SysPm_UnregisterCallback(&gfx_deep_sleep_callback_cfg);
+                Cy_SysPm_RegisterCallback(&gfx_deep_sleep_callback_cfg);
+
+                /* Manually restore GFXSS hardware (DC, MIPIDSI clocks/config).
+                 * During ULP the callback was unregistered, so DeepSleep cycles
+                 * did not restore the GFXSS registers. This call does what the
+                 * AFTER_TRANSITION handler would have done automatically. */
+                Cy_GFXSS_DeepSleepCallback(
+                        gfx_deep_sleep_callback_cfg.callbackParams,
+                        CY_SYSPM_AFTER_TRANSITION);
+#endif /* defined(MTB_DISPLAY_CO5300) */
+
                 /* Exit MIPI DSI ULPM */
                 Cy_MIPIDSI_ExitULPM(&base->GFXSS_MIPIDSI);
-
-#if defined(MTB_DISPLAY_CO5300)
-                mtb_display_co5300_on(&base->GFXSS_MIPIDSI);
-#endif /* MTB_DISPLAY_CO5300 */
 
                 result = Cy_GFXSS_DeInit(base, &gfx_context);
                 if (CY_GFX_SUCCESS != result)
@@ -258,7 +295,7 @@ static void app_state_update(application_states_t state)
                 {
                     /** Set the RRAM to HP voltage mode*/
                     Cy_RRAM_SetVoltageMode(RRAMC0, CY_RRAM_VMODE_HP);
-                    
+
                     Cy_SysClk_ClkHfSetDivider(CY_CFG_SYSCLK_CLKHF0, CY_SYSCLK_CLKHF_DIVIDE_BY_2);
 
                     dpll_lp0_set_freq(DPLL_LP0_OUTPUT_FREQ_HP_HZ);
@@ -268,7 +305,7 @@ static void app_state_update(application_states_t state)
                     Cy_SysClk_PeriPclkSetDivider((en_clk_dst_t)CYBSP_DEBUG_UART_CLK_DIV_GRP_NUM,
                             CY_SYSCLK_DIV_16_BIT, 1U, UART_HP_DIV);
                 }
-               
+
                 SystemCoreClockUpdate();
 
                 Cy_SysTick_Disable();
@@ -296,6 +333,15 @@ static void app_state_update(application_states_t state)
                 {
                     process_error((cy_rslt_t)result, "Gfxss re-initialization failed. STOP.");
                 }
+
+#if defined(MTB_DISPLAY_CO5300)
+                /* Send DISPON after GFXSS is fully initialized so the MIPI DSI
+                 * link is properly configured at HP clock speed. Sending it
+                 * earlier (before DeInit/Init) can fail when the GFXSS DeepSleep
+                 * callback was unregistered during ULP. */
+                mtb_display_co5300_on(&base->GFXSS_MIPIDSI);
+#endif /* MTB_DISPLAY_CO5300 */
+
                 /* Enable GPU interrupt */
                 Cy_GFXSS_Enable_GPU_Interrupt(base);
 
@@ -303,14 +349,25 @@ static void app_state_update(application_states_t state)
                 NVIC_EnableIRQ(GFXSS_GPU_IRQ);
 
 #if defined(W4P3INCH_DISP)
-                /* Enable DC interrupt in NVIC to synchronize frame transfers 
+                /* Enable DC interrupt in NVIC to synchronize frame transfers
                  * with the completion interrupt of frame buffer transfers from
                  * DC.
                  */
+                NVIC_ClearPendingIRQ(GFXSS_DC_IRQ);
                 NVIC_EnableIRQ(GFXSS_DC_IRQ);
+#elif defined(MTB_DISPLAY_CO5300)
+                /* DC_IRQ is gated per-transfer (enabled in disp_flush, disabled
+                 * in on_frame_transfer_complete). Only clear stale pending
+                 * interrupts from the state transition here. */
+                NVIC_ClearPendingIRQ(GFXSS_DC_IRQ);
 #endif
-
-                /* Enable vglite to use GPU */
+#if defined(MTB_DISPLAY_CO5300)
+                /* Force-reset semaphore to available after transition.
+                 * A stalled in-flight transfer (ISR killed by NVIC_DisableIRQ)
+                 * may have left the semaphore in TAKEN state. */
+                xSemaphoreGive(frame_tx_sem);
+                dbi_transfer_enabled = true;
+#endif
                 stat = vg_lite_init(DEFAULT_VG_LITE_TW_WIDTH, DEFAULT_VG_LITE_TW_HEIGHT);
                 if (VG_LITE_SUCCESS != stat)
                 {
@@ -318,23 +375,24 @@ static void app_state_update(application_states_t state)
                     process_error((cy_rslt_t)stat, "VGLite re-initialization failed. STOP.");
                 }
                 gpu_enable = true;
-                
-                extern lv_indev_t* indev_touchpad;                
+
+                extern lv_indev_t* indev_touchpad;
                 cur = lv_display_get_default();
-                if (cur) 
+                if (cur)
                 {
                     lv_indev_set_display(indev_touchpad, cur);
                     lv_timer_t * anim_timer_cpu_fb = lv_anim_get_timer();
                     lv_timer_set_period(anim_timer_cpu_fb, LV_DEF_REFR_PERIOD);
                     lv_timer_t * refr_timer_cpu_fb = lv_display_get_refr_timer(cur);
-                    if (refr_timer_cpu_fb) 
+                    if (refr_timer_cpu_fb)
                     {
                         lv_timer_set_period(refr_timer_cpu_fb, LV_DEF_REFR_PERIOD);
                     }
                 }
-                
+
                 /* Display ui_DigitalScreen */
                 brightness = MAX_BRIGHTNESS_PERCENT;
+#if !LV_USE_DEMO_BENCHMARK
                 _ui_screen_change(&ui_DigitalScreen, LV_SCR_LOAD_ANIM_FADE_ON, RESET_VALUE, RESET_VALUE, &ui_DigitalScreen_screen_init);
 #if defined(MTB_DISPLAY_CO5300)
                 lv_arc_set_value(ui_DigiScreenStepsArc, brightness);
@@ -343,6 +401,7 @@ static void app_state_update(application_states_t state)
                 lv_arc_set_value(ui_DigiScreenBrightnessArc, brightness);
                 lv_obj_send_event(ui_DigiScreenBrightnessArc, LV_EVENT_VALUE_CHANGED, NULL);
 #endif /* MTB_DISPLAY_CO5300 */
+#endif /* !LV_USE_DEMO_BENCHMARK */
 
                 vTaskResume(rtos_date_time_task_handle);
                 vTaskResume(rtos_step_count_task_handle);
@@ -361,7 +420,7 @@ static void app_state_update(application_states_t state)
             case LOW_POWER_STATE:
                 /* Suspend performance monitor in LP depending on display */
 #if defined(USE_PERFORMANCE_MONITOR)
-#if defined(MTB_DISPLAY_CO5300) 
+#if defined(MTB_DISPLAY_CO5300)
                 /* ROUND display */
                 performance_monitor_suspend();
 
@@ -378,7 +437,7 @@ static void app_state_update(application_states_t state)
 
                 /* Disable GPU interrupt in NVIC */
                 NVIC_DisableIRQ(GFXSS_GPU_IRQ);
-#if defined(W4P3INCH_DISP)
+#if defined(W4P3INCH_DISP) || defined(MTB_DISPLAY_CO5300)
                 /* Disable DC interrupt in NVIC */
                 NVIC_DisableIRQ(GFXSS_DC_IRQ);
 #endif
@@ -401,7 +460,7 @@ static void app_state_update(application_states_t state)
                 /** Check if the system successfully entered ULP mode. */
                 if (Cy_SysPm_ReadStatus() & CY_SYSPM_STATUS_SYSTEM_ULP)
                 {
-                    /** Set the RRAM to ULP voltage mode for lower power 
+                    /** Set the RRAM to ULP voltage mode for lower power
                      * consumption. */
                     Cy_RRAM_SetVoltageMode(RRAMC0, CY_RRAM_VMODE_ULP);
 
@@ -412,12 +471,12 @@ static void app_state_update(application_states_t state)
                     Cy_SysClk_PeriPclkSetDivider((en_clk_dst_t)CYBSP_DEBUG_UART_CLK_DIV_GRP_NUM,
                             CY_SYSCLK_DIV_16_BIT, 1U, UART_ULP_DIV);
                 }
-                
+
 
 #elif defined(W4P3INCH_DISP)
                 /* Set LP as System Active Power Profile.
-                 * Note: On 4.3 inch display with 50 MHz core clock in ULP mode, 
-                 * the pixel clock limitation (<= 25 MHz) prevents graphics 
+                 * Note: On 4.3 inch display with 50 MHz core clock in ULP mode,
+                 * the pixel clock limitation (<= 25 MHz) prevents graphics
                  * rendering.
                  */
                 dpll_lp0_set_freq(DPLL_LP0_OUTPUT_FREQ_LP_HZ);
@@ -427,10 +486,10 @@ static void app_state_update(application_states_t state)
                 /** Check if the system successfully entered LP mode. */
                 if (Cy_SysPm_ReadStatus() & CY_SYSPM_STATUS_SYSTEM_LP)
                 {
-                    /** Set the RRAM to LP voltage mode for lower power 
+                    /** Set the RRAM to LP voltage mode for lower power
                         * consumption. */
                     Cy_RRAM_SetVoltageMode(RRAMC0, CY_RRAM_VMODE_LP);
-                    
+
                     Cy_SysClk_ClkHfSetDivider(CY_CFG_SYSCLK_CLKHF0, CY_SYSCLK_CLKHF_DIVIDE_BY_2);
 
                     /** Set the peripheral clock divider for the debug UART */
@@ -474,11 +533,20 @@ static void app_state_update(application_states_t state)
                 }
 
 #if defined(W4P3INCH_DISP)
-                /* Enable DC interrupt in NVIC to synchronize frame transfers 
+                /* Enable DC interrupt in NVIC to synchronize frame transfers
                  * with the completion interrupt of frame buffer transfers from
                  * DC.
                  */
+                NVIC_ClearPendingIRQ(GFXSS_DC_IRQ);
                 NVIC_EnableIRQ(GFXSS_DC_IRQ);
+#endif
+#if defined(MTB_DISPLAY_CO5300)
+                /* DC_IRQ is gated per-transfer by disp_flush / completion
+                 * callback, so no need to keep it permanently disabled.
+                 * Reset semaphore as safety after killing any in-flight
+                 * transfer during the state transition above. */
+                xSemaphoreGive(frame_tx_sem);
+                dbi_transfer_enabled = true;
 #endif
 
                 /* Display ui_LPScreen */
@@ -488,7 +556,9 @@ static void app_state_update(application_states_t state)
 #elif defined(W4P3INCH_DISP)
                 mtb_disp_waveshare_4p3_set_brightness(CYBSP_I2C_CONTROLLER_HW, &i2c_context,brightness );
 #endif
+#if !LV_USE_DEMO_BENCHMARK
                 _ui_screen_change(&ui_LPScreen, LV_SCR_LOAD_ANIM_FADE_ON, RESET_VALUE, RESET_VALUE, &ui_LPScreen_screen_init);
+#endif /* !LV_USE_DEMO_BENCHMARK */
 
 #if defined(MTB_DISPLAY_CO5300)
                 /* Reset/restart the input_inactivity_timer */
@@ -518,7 +588,14 @@ static void app_state_update(application_states_t state)
                 reset_frame_buffer();
 
 #if defined(MTB_DISPLAY_CO5300)
+                dbi_transfer_enabled = false;
                 mtb_display_co5300_off(&base->GFXSS_MIPIDSI);
+
+                /* Unregister the GFXSS DeepSleep callback before ULPM.
+                 * The AFTER_TRANSITION handler re-enables MIPIDSI PHY/clocks
+                 * on every DeepSleep wake, which conflicts with ULPM state and
+                 * can prevent the CPU from servicing GPIO (touch) interrupts. */
+                Cy_SysPm_UnregisterCallback(&gfx_deep_sleep_callback_cfg);
 #elif defined(W4P3INCH_DISP)
 
                 /* System Domain Idle Power Mode Configuration */
@@ -569,16 +646,14 @@ static void app_state_update(application_states_t state)
 *******************************************************************************/
 void input_inactivity_timer_callback(TimerHandle_t timer)
 {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
     CY_UNUSED_PARAMETER(timer);
 
+    dbi_transfer_enabled = false;
     active_state = (HIGH_PERFORMANCE_STATE == active_state) ? LOW_POWER_STATE : ULTRA_LOW_POWER_STATE;
 
     display_active_timeout = true;
 
-    xTaskNotifyFromISR(rtos_app_state_manager_task_handle, RESET_VALUE, eNoAction, &xHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    xTaskNotify(rtos_app_state_manager_task_handle, RESET_VALUE, eNoAction);
 }
 
 
@@ -622,9 +697,9 @@ BaseType_t input_inactivity_timer_start(void)
 * Function Name: user_button_1_interrupt_handler
 ********************************************************************************
 * Summary:
-*  User button 1 emulates touch to wake up functionality for the 7-inch RPi 
-*  display. The USER BTN1 button cycles through three application states: 
-*  high-performance screen, low-power always-on screen, and system deep sleep, 
+*  User button 1 emulates touch to wake up functionality for the 4.3-inch RPi
+*  display. The USER BTN1 button cycles through three application states:
+*  high-performance screen, low-power always-on screen, and system deep sleep,
 *  with each press transitioning to the next mode.
 *
 * Parameters:
@@ -673,11 +748,11 @@ void user_button_1_interrupt_handler(void)
 
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
-    
+
     /* USER_BTN2 pin is present on the same GPIO port as USER_BTN1 pin */
     /* This cause the ISR to execute even when USER_BTN2 is pressed accidentally */
     /* To handle such scenarios we clear the interrupt */
-    
+
     /* Check if USER_BTN2 was pressed */
     if(Cy_GPIO_GetInterruptStatus(CYBSP_USER_BTN2_PORT, CYBSP_USER_BTN2_PIN))
     {
@@ -686,7 +761,7 @@ void user_button_1_interrupt_handler(void)
         NVIC_ClearPendingIRQ(CYBSP_USER_BTN2_IRQ);
     }
 }
-#endif 
+#endif
 
 
 /*******************************************************************************
@@ -710,25 +785,18 @@ void app_state_manager_task(void *arg)
     {
         if (pdPASS == xTaskNotifyWait(RESET_VALUE, RESET_VALUE, NULL, portMAX_DELAY))
         {
-#if defined(MTB_DISPLAY_CO5300)
-            /* Suspend frame transfer task applicable to 1.43 inch
-             * command mode display 
-             */
-            vTaskSuspend(rtos_frame_tx_task_handle);
-#endif /* MTB_DISPLAY_CO5300 */
-
             switch (active_state)
             {
                 case HIGH_PERFORMANCE_STATE:
+                    app_state_update(active_state);
+                    break;
                 case LOW_POWER_STATE:
                     app_state_update(active_state);
-#if defined(MTB_DISPLAY_CO5300)
-                    vTaskResume(rtos_frame_tx_task_handle);
-#endif /* MTB_DISPLAY_CO5300 */
                     break;
 
                 case ULTRA_LOW_POWER_STATE:
                     app_state_update(active_state);
+                    xTaskNotify(rtos_app_task_handle, RESET_VALUE, eNoAction);
                     break;
             }
         }

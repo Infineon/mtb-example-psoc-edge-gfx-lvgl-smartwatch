@@ -102,7 +102,8 @@ void ui_MusicScreen_screen_init(void)
     lv_obj_set_style_bg_opa(ui_MusicPausePlayButtonPanel, (lv_opa_t)0, (lv_style_selector_t)LV_PART_MAIN);
     lv_obj_set_style_bg_image_src(ui_MusicPausePlayButtonPanel, &ui_img_music_pause_button_50_50_no_bg_png,
                                   (lv_style_selector_t)LV_PART_MAIN);
-    lv_obj_set_style_border_side(ui_MusicPausePlayButtonPanel, LV_BORDER_SIDE_NONE, LV_PART_MAIN | (lv_style_selector_t)LV_STATE_DEFAULT);
+    lv_obj_set_style_border_side(ui_MusicPausePlayButtonPanel, LV_BORDER_SIDE_NONE,
+                                 ((lv_style_selector_t)LV_PART_MAIN | (lv_style_selector_t)LV_STATE_DEFAULT));
 
     ui_MusicNextButtonPanel = lv_obj_create(ui_MusicScreen);
     lv_obj_set_width(ui_MusicNextButtonPanel, 57);

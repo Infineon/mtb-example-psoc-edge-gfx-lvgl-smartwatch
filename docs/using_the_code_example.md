@@ -91,6 +91,8 @@ Double-click the generated *{project-name}.cprj* file to launch the Keil&reg; µ
 
 For more details, see the [Arm&reg; Keil&reg; µVision&reg; for ModusToolbox&trade; user guide](https://www.infineon.com/MTBuVisionUserGuide) (locally available at *{ModusToolbox&trade; install directory}/docs_{version}/mt_uvision_user_guide.pdf*).
 
+> **Note:** To use the CE in Keil&reg; µVision&reg; IDE, add `ASFLAGS+=-masm=auto` in the *common.mk* before exporting the CE. However, remove it if you choose to use the Eclipse/CLI build option.
+
 </details>
 
 
